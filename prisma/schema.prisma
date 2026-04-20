@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  passwordHash    String
+  role            String
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  patientProfile  PatientProfile?
+  doctorProfile   DoctorProfile?
+}
+
+model PatientProfile {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  identityNumber     String         @unique
+  firstName          String
+  lastName           String
+  phone              String
+  gender             String
+  birthDate          DateTime
+  bloodType          String?
+  allergies          String?
+  chronicConditions  String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  medicalRecords     MedicalRecord[]
+
+  @@index([lastName, firstName])
+}
+
+model DoctorProfile {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  title              String
+  firstName          String
+  lastName           String
+  branch             String
+  roomNumber         String?
+  active             Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  scheduleSlots      ScheduleSlot[]
+
+  @@index([branch, active])
+}
+
+model Appointment {
+  id                 String             @id @default(cuid())
+  patientId          String
+  doctorId           String
+  startsAt           DateTime
+  endsAt             DateTime
+  status             String             @default("PENDING")
+  channel            String
+  notes              String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  patient            PatientProfile     @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor             DoctorProfile      @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+
+  @@index([doctorId, startsAt])
+  @@index([patientId, startsAt])
+  @@index([status, startsAt])
+}
+
+model ScheduleSlot {
+  id                 String         @id @default(cuid())
+  doctorId           String
+  dayOfWeek          Int
+  startMinute        Int
+  endMinute          Int
+  slotDuration       Int            @default(15)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  doctor             DoctorProfile  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, dayOfWeek])
+}
+
+model MedicalRecord {
+  id                 String         @id @default(cuid())
+  patientId          String
+  diagnosis          String
+  treatmentPlan      String
+  prescribedBy       String
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  patient            PatientProfile @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, createdAt])
+}
