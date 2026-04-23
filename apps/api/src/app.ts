@@ -2,6 +2,7 @@ import cors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
+import { ZodError } from "zod";
 
 import { authenticate, authorize, type JwtUserPayload } from "./auth.js";
 import { ObservabilityStore } from "./observability/store.js";
@@ -13,6 +14,7 @@ import { authRoutes } from "./routes/auth.js";
 import { doctorRoutes } from "./routes/doctors.js";
 import { healthRoutes } from "./routes/health.js";
 import { medicalRecordRoutes } from "./routes/medical-records.js";
+import { nurseRoutes } from "./routes/nurses.js";
 import { observabilityRoutes } from "./routes/observability.js";
 import { patientRoutes } from "./routes/patients.js";
 
@@ -100,12 +102,33 @@ export function buildApp() {
   app.register(adminUserRoutes, { prefix: "/api" });
   app.register(patientRoutes, { prefix: "/api" });
   app.register(doctorRoutes, { prefix: "/api" });
+  app.register(nurseRoutes, { prefix: "/api" });
   app.register(appointmentRoutes, { prefix: "/api" });
   app.register(medicalRecordRoutes, { prefix: "/api" });
   app.register(observabilityRoutes, { prefix: "/api" });
 
   app.setErrorHandler((error, request, reply) => {
     const routePath = request.routeOptions.url ?? request.raw.url ?? "unknown";
+    
+    // Handle Zod validation errors
+    if (error instanceof ZodError) {
+      observability.recordError({
+        method: request.method,
+        path: routePath,
+        statusCode: 400,
+        message: "Validation Error",
+        stack: error.stack
+      });
+      
+      return reply.status(400).send({
+        message: "Validation error",
+        errors: error.errors.map(e => ({
+          field: e.path.join("."),
+          message: e.message
+        }))
+      });
+    }
+    
     const statusCode =
       typeof (error as { statusCode?: unknown }).statusCode === "number"
         ? (error as { statusCode: number }).statusCode

@@ -68,6 +68,8 @@ export async function doctorRoutes(app: FastifyInstance) {
         });
       }
 
+      console.log(`Doctor ${doctor.user.email} has ${doctor.appointments.length} appointments`);
+
       const patientMap = new Map<string, {
         id: string;
         fullName: string;
@@ -214,4 +216,30 @@ export async function doctorRoutes(app: FastifyInstance) {
     }
   );
 
+  app.delete(
+    "/doctors/:id",
+    { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      // Check if doctor has active appointments
+      const activeAppointments = await app.prisma.appointment.count({
+        where: {
+          doctorId: id,
+          status: { in: ["PENDING", "CONFIRMED"] }
+        }
+      });
+
+      if (activeAppointments > 0) {
+        return reply.code(400).send({
+          message: "Bu hekimi silmek mümkün deyil, çünki aktiv randevuları var."
+        });
+      }
+
+      // Delete doctor profile (user will be deleted via cascade)
+      await app.prisma.doctorProfile.delete({ where: { id } });
+
+      return { message: "Hekim uğurla silindi." };
+    }
+  );
 }

@@ -32,6 +32,11 @@ const resetAdminPasswordSchema = z.object({
   newPassword: z.string().min(8)
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8)
+});
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8)
@@ -136,7 +141,14 @@ export async function authRoutes(app: FastifyInstance) {
     const body = loginSchema.parse(request.body);
 
     const user = await app.prisma.user.findUnique({
-      where: { email: body.email }
+      where: { email: body.email },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        passwordHash: true,
+        active: true
+      }
     });
 
     if (!user) {
@@ -202,6 +214,43 @@ export async function authRoutes(app: FastifyInstance) {
 
     return { message: "Admin sifresi ugurla sifirlandi." };
   });
+
+  app.post(
+    "/auth/change-password",
+    {
+      preHandler: [app.authenticate]
+    },
+    async (request, reply) => {
+      const body = changePasswordSchema.parse(request.body);
+      const userId = request.user.sub;
+
+      if (!userId) {
+        return reply.code(401).send({ message: "Giriş tələb olunur." });
+      }
+
+      const user = await app.prisma.user.findUnique({
+        where: { id: userId },
+        select: { passwordHash: true }
+      });
+
+      if (!user) {
+        return reply.code(404).send({ message: "İstifadəçi tapılmadı." });
+      }
+
+      const isValid = await bcrypt.compare(body.currentPassword, user.passwordHash);
+      if (!isValid) {
+        return reply.code(400).send({ message: "Cari şifrə yanlışdır." });
+      }
+
+      const newPasswordHash = await bcrypt.hash(body.newPassword, 10);
+      await app.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash: newPasswordHash }
+      });
+
+      return { message: "Şifrə uğurla dəyişdirildi." };
+    }
+  );
 
   app.get(
     "/auth/me",

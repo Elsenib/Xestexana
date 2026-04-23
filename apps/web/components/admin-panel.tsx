@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useLocale } from "./LocaleProvider";
+
 import type { AppointmentSummary } from "@hospital/shared";
 
 type MetricState = {
@@ -23,6 +25,15 @@ type DoctorRow = {
   fullName: string;
   branch: string;
   roomNumber?: string | null;
+  active: boolean;
+};
+
+type NurseRow = {
+  id: string;
+  email: string;
+  role: string;
+  active: boolean;
+  createdAt: string;
 };
 
 type AdminUserRow = {
@@ -78,6 +89,7 @@ function channelLabel(channel: string) {
 }
 
 export function AdminPanel() {
+  const { t } = useLocale();
   const [token, setToken] = useState<string>("");
   const [userEmail, setUserEmail] = useState("");
   const [userRole, setUserRole] = useState("");
@@ -94,6 +106,7 @@ export function AdminPanel() {
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [doctors, setDoctors] = useState<DoctorRow[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUserRow[]>([]);
+  const [nurses, setNurses] = useState<NurseRow[]>([]);
 
   const [bootstrapSetupKey, setBootstrapSetupKey] = useState("");
   const [bootstrapEmail, setBootstrapEmail] = useState("admin@hospital.local");
@@ -150,7 +163,7 @@ export function AdminPanel() {
     const endDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     try {
-      const [metricsRes, meRes, appointmentsRes, patientsRes, doctorsRes, adminUsersRes] = await Promise.all([
+      const [metricsRes, meRes, appointmentsRes, patientsRes, doctorsRes, adminUsersRes, nursesRes] = await Promise.all([
         fetch(`${API_BASE}/observability/metrics`),
         fetch(`${API_BASE}/auth/me`, { headers: authHeaders }),
         fetch(
@@ -159,7 +172,8 @@ export function AdminPanel() {
         ),
         fetch(`${API_BASE}/patients`, { headers: authHeaders }),
         fetch(`${API_BASE}/doctors`, { headers: authHeaders }),
-        fetch(`${API_BASE}/admin-users`, { headers: authHeaders })
+        fetch(`${API_BASE}/admin-users`, { headers: authHeaders }),
+        fetch(`${API_BASE}/nurses`, { headers: authHeaders })
       ]);
 
       if (metricsRes.ok) {
@@ -201,8 +215,12 @@ export function AdminPanel() {
       if (adminUsersRes.ok) {
         setAdminUsers(await adminUsersRes.json());
       }
+
+      if (nursesRes.ok) {
+        setNurses(await nursesRes.json());
+      }
     } catch (error) {
-      setGlobalError(error instanceof Error ? error.message : "Naməlum xəta baş verdi.");
+      setGlobalError(error instanceof Error ? error.message : t("messages.unknownError"));
     }
   }, [appointmentForm.doctorId, appointmentForm.patientId, authHeaders, token]);
 
@@ -240,7 +258,7 @@ export function AdminPanel() {
       return;
     }
 
-    setGlobalMessage("Admin istifadəçi yaradıldı. İndi giriş edə bilərsiniz.");
+    setGlobalMessage(t("messages.adminAccountCreated"));
   }
 
   async function doLogin() {
@@ -261,7 +279,7 @@ export function AdminPanel() {
 
     const payload = await response.json();
     setToken(payload.token);
-    setGlobalMessage("Giriş uğurla tamamlandı.");
+    setGlobalMessage(t("messages.loginSuccess"));
   }
 
   async function createPatient() {
@@ -283,7 +301,7 @@ export function AdminPanel() {
       return;
     }
 
-    setGlobalMessage("Pasiyent uğurla əlavə edildi.");
+    setGlobalMessage(t("messages.patientAdded"));
     setPatientForm({
       email: "",
       password: "",
@@ -317,7 +335,7 @@ export function AdminPanel() {
       return;
     }
 
-    setGlobalMessage("Həkim uğurla əlavə edildi.");
+    setGlobalMessage(t("messages.doctorAdded"));
     setDoctorForm({
       email: "",
       password: "",
@@ -350,7 +368,7 @@ export function AdminPanel() {
       return;
     }
 
-    setGlobalMessage("Randevu uğurla yaradıldı.");
+    setGlobalMessage(t("messages.appointmentCreated"));
     await loadData();
   }
 
@@ -374,7 +392,53 @@ export function AdminPanel() {
       return;
     }
 
-    setGlobalMessage("Yeni çağrı mərkəzi istifadəçisi yaradıldı.");
+    setGlobalMessage(t("messages.callCenterUserCreated"));
+    await loadData();
+  }
+
+  async function deleteDoctor(id: string) {
+    if (!confirm("Bu hekimi silmək istədiyinizdən əminsiniz? Bu əməliyyat geri qaytarıl bilməz.")) {
+      return;
+    }
+
+    setGlobalMessage("");
+    setGlobalError("");
+
+    const response = await fetch(`${API_BASE}/doctors/${id}`, {
+      method: "DELETE",
+      headers: authHeaders
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      setGlobalError(error?.message ?? "Həkim silinmədi.");
+      return;
+    }
+
+    setGlobalMessage(t("messages.doctorDeleted"));
+    await loadData();
+  }
+
+  async function deleteNurse(id: string) {
+    if (!confirm("Bu hemşirəni silmək istədiyinizdən əminsiniz? Bu əməliyyat geri qaytarıl bilməz.")) {
+      return;
+    }
+
+    setGlobalMessage("");
+    setGlobalError("");
+
+    const response = await fetch(`${API_BASE}/nurses/${id}`, {
+      method: "DELETE",
+      headers: authHeaders
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      setGlobalError(error?.message ?? "Hemşire silinmədi.");
+      return;
+    }
+
+    setGlobalMessage(t("messages.nurseDeleted"));
     await loadData();
   }
 
@@ -449,6 +513,7 @@ export function AdminPanel() {
           <a href="#patients">Pasiyent qeydiyyatı</a>
           <a href="#appointments">Randevular</a>
           <a href="#doctors">Həkim planlaması</a>
+          <a href="#nurses">Hemşire idarəsi</a>
           <a href="#reports">Admin istifadəçilər</a>
         </nav>
 
@@ -652,6 +717,31 @@ export function AdminPanel() {
             <button type="button" onClick={() => void createDoctor()}>
               Həkim əlavə et
             </button>
+
+            <div className="doctor-list">
+              {doctors.map((doctor) => (
+                <div key={doctor.id} className="doctor-row">
+                  <div>
+                    <strong>{doctor.fullName}</strong>
+                    <p>
+                      {doctor.branch} • Otaq: {doctor.roomNumber || "Yoxdur"}
+                    </p>
+                  </div>
+                  <div className="doctor-actions">
+                    <span data-active={doctor.active}>{doctor.active ? "Aktiv" : "Deaktiv"}</span>
+                    {!doctor.active && (
+                      <button
+                        type="button"
+                        className="delete-button"
+                        onClick={() => void deleteDoctor(doctor.id)}
+                      >
+                        Sil
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </article>
         </section>
 
@@ -750,6 +840,38 @@ export function AdminPanel() {
                   <div className="appointment-meta">
                     <span>{channelLabel(appointment.channel)}</span>
                     <span data-status={appointment.status}>{statusLabel(appointment.status)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="panel-card" id="nurses">
+            <div className="panel-head">
+              <div>
+                <span className="eyebrow">Hemşire idarəsi</span>
+                <h2>Hemşire siyahısı</h2>
+              </div>
+            </div>
+
+            <div className="nurse-list">
+              {nurses.map((nurse) => (
+                <div key={nurse.id} className="nurse-row">
+                  <div>
+                    <strong>{nurse.email}</strong>
+                    <p>Yaradılıb: {formatDate(nurse.createdAt)}</p>
+                  </div>
+                  <div className="nurse-actions">
+                    <span data-active={nurse.active}>{nurse.active ? "Aktiv" : "Deaktiv"}</span>
+                    {!nurse.active && (
+                      <button
+                        type="button"
+                        className="delete-button"
+                        onClick={() => void deleteNurse(nurse.id)}
+                      >
+                        Sil
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

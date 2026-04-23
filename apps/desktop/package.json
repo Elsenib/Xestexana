@@ -1,0 +1,58 @@
+{
+  "name": "desktop",
+  "version": "1.0.0",
+  "description": "Hospital Platform - Desktop App",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64",
+    "build:dir": "electron-builder --win --x64 --dir"
+  },
+  "build": {
+    "appId": "com.dasdanstudio.hospitalplatform",
+    "productName": "Hospital Platform",
+    "directories": {
+      "output": "../../dist/desktop"
+    },
+    "files": [
+      "main.js",
+      "loading.html"
+    ],
+    "extraFiles": [
+      {
+        "from": "../../",
+        "to": ".",
+        "filter": [
+          "apps/api/**",
+          "apps/web/**",
+          "packages/**",
+          "prisma/**",
+          "node_modules/**",
+          ".env",
+          "package.json",
+          "package-lock.json",
+          "tsconfig.base.json"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

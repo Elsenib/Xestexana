@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LOCALES, type Locale, useLocale } from "./LocaleProvider";
 
 type UserRole = "ADMIN" | "DOCTOR" | "NURSE" | "PATIENT" | "CALL_CENTER";
 
@@ -124,60 +125,6 @@ type PatientPortalData = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
-function roleLabel(role: string) {
-  switch (role) {
-    case "ADMIN":
-      return "Admin";
-    case "DOCTOR":
-      return "Həkim";
-    case "CALL_CENTER":
-      return "Qeydiyyat";
-    case "NURSE":
-      return "Tibb bacısı";
-    case "PATIENT":
-      return "Pasiyent";
-    default:
-      return role;
-  }
-}
-
-function statusLabel(status: string) {
-  switch (status) {
-    case "CONFIRMED":
-      return "Təsdiqlənib";
-    case "PENDING":
-      return "Gözləyir";
-    case "COMPLETED":
-      return "Tamamlanıb";
-    case "CANCELED":
-      return "Ləğv edilib";
-    case "NO_SHOW":
-      return "Gəlməyib";
-    default:
-      return status;
-  }
-}
-
-function channelLabel(channel: string) {
-  switch (channel) {
-    case "web":
-      return "Veb";
-    case "mobile":
-      return "Mobil";
-    case "call-center":
-      return "Qeydiyyat";
-    default:
-      return channel;
-  }
-}
-
-function formatDate(dateIso: string) {
-  return new Intl.DateTimeFormat("az-Latn-AZ", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(dateIso));
-}
-
 function toInputDateTime(offsetHours: number) {
   const date = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
   const timezoneOffset = date.getTimezoneOffset();
@@ -259,6 +206,34 @@ export function RolePortal() {
     branch: "",
     roomNumber: ""
   });
+  const { locale, setLocale, t, bundle } = useLocale();
+
+  const localeDateFormat: Record<Locale, string> = {
+    az: "az-Latn-AZ",
+    en: "en-US",
+    ru: "ru-RU",
+    tr: "tr-TR"
+  };
+
+  function formatDate(dateIso: string) {
+    return new Intl.DateTimeFormat(localeDateFormat[locale], {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(new Date(dateIso));
+  }
+
+  function roleLabel(role: string) {
+    return t(`roles.${role}`, role);
+  }
+
+  function statusLabel(status: string) {
+    return t(`status.${status}`, status);
+  }
+
+  function channelLabel(channel: string) {
+    return t(`channel.${channel}`, channel);
+  }
+
   const [appointmentForm, setAppointmentForm] = useState({
     patientId: "",
     doctorId: "",
@@ -277,6 +252,11 @@ export function RolePortal() {
     patientId: "",
     diagnosis: "",
     treatmentPlan: ""
+  });
+  const [changePasswordForm, setChangePasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: ""
   });
 
   async function requestJson<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
@@ -417,7 +397,7 @@ export function RolePortal() {
         await loadPatientData();
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Veri yüklənmədi.");
+      setError(loadError instanceof Error ? loadError.message : t("messages.dataLoadError"));
     } finally {
       setLoading(false);
     }
@@ -483,7 +463,7 @@ export function RolePortal() {
       setCurrentUser(payload.user);
       setMessage(`${roleLabel(payload.user.role)} girişi tamamlandı.`);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Giriş uğursuz oldu.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.loginError"));
     }
   }
 
@@ -500,11 +480,11 @@ export function RolePortal() {
         false
       );
 
-      setMessage("Admin hesabı yaradıldı. İndi admin girişi edə bilərsiniz.");
+      setMessage(t("messages.adminAccountCreated"));
       setAuthMode("staff-login");
       setLoginForm({ email: bootstrapForm.email, password: bootstrapForm.password });
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Bootstrap uğursuz oldu.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.bootstrapError"));
     }
   }
 
@@ -526,7 +506,38 @@ export function RolePortal() {
       setLoginForm({ email: resetForm.email, password: resetForm.newPassword });
       setResetForm((prev) => ({ ...prev, newPassword: "" }));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Şifrə sıfırlama uğursuz oldu.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.resetPasswordError"));
+    }
+  }
+
+  async function changePassword() {
+    resetFeedback();
+
+    if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) {
+      setError("Yeni şifrə və təsdiq şifrəsi uyğun gəlmir.");
+      return;
+    }
+
+    try {
+      const result = await requestJson<{ message: string }>(
+        "/auth/change-password",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            currentPassword: changePasswordForm.currentPassword,
+            newPassword: changePasswordForm.newPassword
+          })
+        }
+      );
+
+      setMessage(result.message);
+      setChangePasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: ""
+      });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : t("messages.changePasswordError"));
     }
   }
 
@@ -551,9 +562,9 @@ export function RolePortal() {
 
       setToken(payload.token);
       setCurrentUser(payload.user);
-      setMessage("Pasiyent hesabınız yaradıldı və giriş edildi.");
+      setMessage(t("messages.patientAccountCreated"));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Qeydiyyat mümkün olmadı.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.registerError"));
     }
   }
 
@@ -575,7 +586,7 @@ export function RolePortal() {
         }
       );
 
-      setMessage("Pasiyent qeydiyyatı tamamlandı.");
+      setMessage(t("messages.patientCreated"));
       setPatientCreateForm({
         email: "",
         password: "",
@@ -591,7 +602,7 @@ export function RolePortal() {
       });
       await loadDashboard(currentUser?.role ?? "CALL_CENTER");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Pasiyent yaradılmadı.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.patientCreateError"));
     }
   }
 
@@ -608,7 +619,7 @@ export function RolePortal() {
         })
       });
 
-      setMessage("Yeni həkim əlavə edildi.");
+      setMessage(t("messages.doctorCreated"));
       setDoctorCreateForm({
         email: "",
         password: "",
@@ -620,7 +631,7 @@ export function RolePortal() {
       });
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Həkim yaradılmadı.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.doctorCreateError"));
     }
   }
 
@@ -633,11 +644,11 @@ export function RolePortal() {
         body: JSON.stringify(staffForm)
       });
 
-      setMessage(`${roleLabel(staffForm.role)} hesabı yaradıldı.`);
+      setMessage(t("messages.staffAccountCreated", { role: roleLabel(staffForm.role) }));
       setStaffForm({ email: "", password: "", role: "CALL_CENTER" });
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "İşçi hesabı yaradılmadı.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.staffCreateError"));
     }
   }
 
@@ -648,10 +659,28 @@ export function RolePortal() {
       await requestJson(`/admin-users/${id}/deactivate`, {
         method: "PATCH"
       });
-      setMessage("Isci hesabi deaktiv edildi.");
+      setMessage("İşçi hesabı deaktiv edildi.");
       await loadAdminData();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Deaktivasiya mumkun olmadi.");
+    }
+  }
+
+  async function deleteStaff(id: string) {
+    resetFeedback();
+
+    if (!confirm("Bu işçini silmək istədiyinizə əminsiniz? Bu əməliyyat geri qaytarılmayacaq.")) {
+      return;
+    }
+
+    try {
+      await requestJson(`/admin-users/${id}`, {
+        method: "DELETE"
+      });
+      setMessage("İşçi uğurla silindi.");
+      await loadAdminData();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Silinmə uğursuz oldu.");
     }
   }
 
@@ -666,6 +695,24 @@ export function RolePortal() {
       await loadAdminData();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Deaktivasiya mumkun olmadi.");
+    }
+  }
+
+  async function deleteDoctor(id: string) {
+    resetFeedback();
+
+    if (!confirm("Bu həkimi silmək istədiyinizə əminsiniz? Bu əməliyyat geri qaytarılmayacaq.")) {
+      return;
+    }
+
+    try {
+      await requestJson(`/doctors/${id}`, {
+        method: "DELETE"
+      });
+      setMessage("Həkim uğurla silindi.");
+      await loadAdminData();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Silinmə uğursuz oldu.");
     }
   }
 
@@ -687,10 +734,10 @@ export function RolePortal() {
         body: JSON.stringify(body)
       });
 
-      setMessage("Randevu yaradıldı.");
+      setMessage(t("messages.appointmentCreated"));
       await loadDashboard(currentUser?.role ?? "CALL_CENTER");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Randevu yaradılmadı.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.appointmentCreateError"));
     }
   }
 
@@ -714,10 +761,10 @@ export function RolePortal() {
         })
       });
 
-      setMessage("Randevu sorğunuz qeydə alındı.");
+      setMessage(t("messages.appointmentBooked"));
       await loadPatientData();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Randevu alına bilmədi.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.appointmentBookingError"));
     }
   }
 
@@ -730,7 +777,7 @@ export function RolePortal() {
         body: JSON.stringify(medicalRecordForm)
       });
 
-      setMessage("Pasiyent üçün tibbi qeyd əlavə edildi.");
+      setMessage(t("messages.medicalRecordCreated"));
       await loadDoctorData();
       await loadDoctorPatientDetails(medicalRecordForm.patientId);
       setMedicalRecordForm((current) => ({
@@ -739,7 +786,7 @@ export function RolePortal() {
         treatmentPlan: ""
       }));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Tibbi qeyd yazılmadı.");
+      setError(submitError instanceof Error ? submitError.message : t("messages.medicalRecordCreateError"));
     }
   }
 
@@ -751,7 +798,7 @@ export function RolePortal() {
     setDoctorDashboard(null);
     setPatientPortal(null);
     setDoctorPatientDetails(null);
-    setMessage("Çıxış edildi.");
+    setMessage(t("messages.logoutSuccess"));
     setError("");
   }
 
@@ -760,151 +807,148 @@ export function RolePortal() {
       <article className="panel-card auth-panel">
         <div className="auth-switcher">
           <button type="button" className={authMode === "patient-login" ? "ghost-button active-chip" : "ghost-button"} onClick={() => setAuthMode("patient-login")}>
-            Pasiyent girişi
+            {t("auth.tabs.patientLogin")}
           </button>
           <button type="button" className={authMode === "patient-register" ? "ghost-button active-chip" : "ghost-button"} onClick={() => setAuthMode("patient-register")}>
-            Pasiyent qeydiyyatı
+            {t("auth.tabs.patientRegister")}
           </button>
           <button type="button" className={authMode === "staff-login" ? "ghost-button active-chip" : "ghost-button"} onClick={() => setAuthMode("staff-login")}>
-            Personel girişi
+            {t("auth.tabs.staffLogin")}
           </button>
           <button type="button" className={authMode === "bootstrap" ? "ghost-button active-chip" : "ghost-button"} onClick={() => setAuthMode("bootstrap")}>
-            Admin qurulumu
+            {t("auth.tabs.bootstrap")}
           </button>
           <button type="button" className={authMode === "reset-password" ? "ghost-button active-chip" : "ghost-button"} onClick={() => setAuthMode("reset-password")}>
-            Şifrəni sıfırla
+            {t("auth.tabs.resetPassword")}
           </button>
         </div>
 
         {authMode === "patient-login" || authMode === "staff-login" ? (
           <>
-            <span className="eyebrow">Təhlükəsiz giriş</span>
-            <h2>{authMode === "patient-login" ? "Pasiyent portalına daxil olun" : "Rolunuza uyğun iş ekranına daxil olun"}</h2>
-            <p>
-              Admin yalnız idarəetmə panelini, həkim yalnız öz pasiyent və randevu ekranını, qeydiyyat isə qəbul
-              axınını görür.
-            </p>
+            <span className="eyebrow">{t("auth.headings.secureLogin")}</span>
+            <h2>{authMode === "patient-login" ? t("auth.headings.patientPortal") : t("auth.headings.staffPortal")}</h2>
+            <p>{t("auth.descriptions.staffIntro")}</p>
             <div className="form-grid single">
               <label>
-                E-poçt
+                {t("auth.form.email")}
                 <input value={loginForm.email} onChange={(event) => setLoginForm((current) => ({ ...current, email: event.target.value }))} />
               </label>
               <label>
-                Şifrə
+                {t("auth.form.password")}
                 <input type="password" value={loginForm.password} onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))} />
               </label>
             </div>
             <button type="button" onClick={() => void submitLogin()}>
-              Giriş et
+              {t("auth.buttons.login")}
             </button>
           </>
         ) : null}
 
         {authMode === "patient-register" ? (
           <>
-            <span className="eyebrow">Yeni pasiyent</span>
-            <h2>Onlayn hesab yarat və öz randevularını idarə et</h2>
+            <span className="eyebrow">{t("forms.newPatient")}</span>
+            <h2>{t("auth.descriptions.register")}</h2>
             <div className="form-grid">
               <label>
-                E-poçt
+                {t("auth.form.email")}
                 <input value={registerForm.email} onChange={(event) => setRegisterForm((current) => ({ ...current, email: event.target.value }))} />
               </label>
               <label>
-                Şifrə
+                {t("auth.form.password")}
                 <input type="password" value={registerForm.password} onChange={(event) => setRegisterForm((current) => ({ ...current, password: event.target.value }))} />
               </label>
               <label>
-                Şəxsiyyət nömrəsi
+                {t("auth.form.identityNumber")}
                 <input value={registerForm.identityNumber} onChange={(event) => setRegisterForm((current) => ({ ...current, identityNumber: event.target.value }))} />
               </label>
               <label>
-                Telefon
+                {t("auth.form.phone")}
                 <input value={registerForm.phone} onChange={(event) => setRegisterForm((current) => ({ ...current, phone: event.target.value }))} />
               </label>
               <label>
-                Ad
+                {t("auth.form.firstName")}
                 <input value={registerForm.firstName} onChange={(event) => setRegisterForm((current) => ({ ...current, firstName: event.target.value }))} />
               </label>
               <label>
-                Soyad
+                {t("auth.form.lastName")}
                 <input value={registerForm.lastName} onChange={(event) => setRegisterForm((current) => ({ ...current, lastName: event.target.value }))} />
               </label>
               <label>
-                Cins
+                {t("auth.form.gender")}
                 <select value={registerForm.gender} onChange={(event) => setRegisterForm((current) => ({ ...current, gender: event.target.value }))}>
-                  <option value="FEMALE">Qadın</option>
-                  <option value="MALE">Kişi</option>
-                  <option value="OTHER">Digər</option>
+                  <option value="FEMALE">{t("auth.form.genderFemale", "Qadın")}</option>
+                  <option value="MALE">{t("auth.form.genderMale", "Kişi")}</option>
+                  <option value="OTHER">{t("auth.form.genderOther", "Digər")}</option>
                 </select>
               </label>
               <label>
-                Doğum tarixi
+                {t("auth.form.birthDate")}
                 <input type="date" value={registerForm.birthDate} onChange={(event) => setRegisterForm((current) => ({ ...current, birthDate: event.target.value }))} />
               </label>
               <label>
-                Qan qrupu
+                {t("auth.form.bloodType")}
                 <input value={registerForm.bloodType} onChange={(event) => setRegisterForm((current) => ({ ...current, bloodType: event.target.value }))} />
               </label>
               <label>
-                Allergiyalar
+                {t("auth.form.allergies")}
                 <input value={registerForm.allergies} onChange={(event) => setRegisterForm((current) => ({ ...current, allergies: event.target.value }))} />
               </label>
             </div>
             <label className="full-width-field">
-              Xroniki xəstəliklər
+              {t("auth.form.chronicConditions")}
               <textarea value={registerForm.chronicConditions} onChange={(event) => setRegisterForm((current) => ({ ...current, chronicConditions: event.target.value }))} />
             </label>
             <button type="button" onClick={() => void submitPatientRegister()}>
-              Hesab yarat
+              {t("auth.buttons.createAccount")}
             </button>
           </>
         ) : null}
 
         {authMode === "bootstrap" ? (
           <>
-            <span className="eyebrow">İlk qurulum</span>
-            <h2>Yalnız ilk admin hesabı üçün</h2>
+            <span className="eyebrow">{t("auth.headings.bootstrap")}</span>
+            <h2>{t("auth.headings.bootstrap")}</h2>
             <div className="form-grid single">
               <label>
-                Qurulum açarı
+                {t("auth.form.setupKey")}
                 <input value={bootstrapForm.setupKey} onChange={(event) => setBootstrapForm((current) => ({ ...current, setupKey: event.target.value }))} />
               </label>
               <label>
-                Admin e-poçtu
+                {t("auth.form.email")}
                 <input value={bootstrapForm.email} onChange={(event) => setBootstrapForm((current) => ({ ...current, email: event.target.value }))} />
               </label>
               <label>
-                Admin şifrəsi
+                {t("auth.form.password")}
                 <input type="password" value={bootstrapForm.password} onChange={(event) => setBootstrapForm((current) => ({ ...current, password: event.target.value }))} />
               </label>
             </div>
             <button type="button" onClick={() => void submitBootstrap()}>
-              Admin hesabı yarat
+              {t("auth.buttons.bootstrap")}
             </button>
           </>
         ) : null}
 
         {authMode === "reset-password" ? (
           <>
-            <span className="eyebrow">Şifrə sıfırlama</span>
-            <h2>Admin şifrəsini yenilə</h2>
-            <p>Qurulum açarını bilirsinizsə admin şifrəsini sıfırlaya bilərsiniz.</p>
+            <span className="eyebrow">{t("auth.headings.resetPassword")}</span>
+            <h2>{t("auth.headings.resetPassword")}</h2>
+            <p>{t("auth.descriptions.resetHint")}</p>
             <div className="form-grid single">
               <label>
-                Qurulum açarı
+                {t("auth.form.setupKey")}
                 <input value={resetForm.setupKey} onChange={(event) => setResetForm((current) => ({ ...current, setupKey: event.target.value }))} />
               </label>
               <label>
-                Admin e-poçtu
+                {t("auth.form.email")}
                 <input value={resetForm.email} onChange={(event) => setResetForm((current) => ({ ...current, email: event.target.value }))} />
               </label>
               <label>
-                Yeni şifrə
+                {t("auth.form.newPassword")}
                 <input type="password" value={resetForm.newPassword} onChange={(event) => setResetForm((current) => ({ ...current, newPassword: event.target.value }))} placeholder="Minimum 8 simvol" />
               </label>
             </div>
             <button type="button" onClick={() => void submitResetPassword()}>
-              Şifrəni sıfırla
+              {t("auth.buttons.resetPassword")}
             </button>
           </>
         ) : null}
@@ -920,42 +964,39 @@ export function RolePortal() {
       <main className="shell landing-shell">
         <section className="public-grid">
           <article className="hero-card portal-hero">
-            <span className="eyebrow">Hospital Platform</span>
-            <h1>Hər rol üçün ayrı, məqsədə uyğun iş ekranı</h1>
-            <p>
-              Pasiyent randevu və tibbi qeydlərini izləyir, həkim yalnız öz pasiyentlərini görür, qeydiyyat masası isə
-              kimlik yoxlayıb doğru həkimə yönləndirmə aparır.
-            </p>
+            <span className="eyebrow">{t("appTitle")}</span>
+            <h1>{t("landing.heroTitle")}</h1>
+            <p>{t("landing.heroDescription")}</p>
             <div className="hero-stats">
               <div>
                 <strong>4</strong>
-                <span>Ayrı portal</span>
+                <span>{t("landing.stats.portals")}</span>
               </div>
               <div>
                 <strong>JWT</strong>
-                <span>Rol əsaslı giriş</span>
+                <span>{t("landing.stats.auth")}</span>
               </div>
               <div>
-                <strong>Canlı</strong>
-                <span>API və qeyd axını</span>
+                <strong>{t("landing.stats.live")}</strong>
+                <span>{t("landing.stats.live")}</span>
               </div>
             </div>
             <div className="highlight-list">
               <div className="highlight-item">
-                <strong>Admin</strong>
-                <p>Sistem idarəsi, işçi hesabları, həkim və qeydiyyat nəzarəti.</p>
+                <strong>{t("landing.cards.admin.title")}</strong>
+                <p>{t("landing.cards.admin.description")}</p>
               </div>
               <div className="highlight-item">
-                <strong>Qeydiyyat</strong>
-                <p>Kimlik yoxlama, pasiyent açılışı, uyğun həkimə çakışmasız qeyd.</p>
+                <strong>{t("landing.cards.frontdesk.title")}</strong>
+                <p>{t("landing.cards.frontdesk.description")}</p>
               </div>
               <div className="highlight-item">
-                <strong>Həkim</strong>
-                <p>Günün randevuları, pasiyent profili, müalicə və təyinat qeydi.</p>
+                <strong>{t("landing.cards.doctor.title")}</strong>
+                <p>{t("landing.cards.doctor.description")}</p>
               </div>
               <div className="highlight-item">
-                <strong>Pasiyent</strong>
-                <p>Yeni randevu, keçmiş görüşlər, rapor və reseptlərin görünüşü.</p>
+                <strong>{t("landing.cards.patient.title")}</strong>
+                <p>{t("landing.cards.patient.description")}</p>
               </div>
             </div>
           </article>
@@ -997,17 +1038,28 @@ export function RolePortal() {
           </nav>
 
           <div className="sidebar-card">
-            <span className="eyebrow">Aktiv sessiya</span>
+            <span className="eyebrow">{t("shell.activeSession")}</span>
             <strong>{currentUser?.email}</strong>
-            <p>Rol: {currentUser ? roleLabel(currentUser.role) : "-"}</p>
+            <p>{t("shell.roleField")}: {currentUser ? roleLabel(currentUser.role) : "-"}</p>
             <button type="button" className="ghost-button" onClick={logout}>
-              Çıxış et
+              {t("auth.buttons.logout", "Çıxış et")}
             </button>
+          </div>
+
+          <div className="sidebar-card">
+            <span className="eyebrow">{t("ui.language")}</span>
+            <select value={locale} onChange={(event) => setLocale(event.target.value as Locale)}>
+              {Object.entries(bundle.ui.languages).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </div>
         </aside>
 
         <section className="dashboard">
-          {loading ? <p className="status-ok">Məlumatlar yüklənir...</p> : null}
+          {loading ? <p className="status-ok">{t("messages.loadingData")}</p> : null}
           {message ? <p className="status-ok">{message}</p> : null}
           {error ? <p className="status-error">{error}</p> : null}
           {body}
@@ -1025,21 +1077,22 @@ export function RolePortal() {
     const formerDoctors = doctors.filter((doctor) => doctor.active === false);
 
     return renderShell(
-      "Admin panel",
-      "Sistem idarəetməsi",
+      t("shell.adminTitle"),
+      t("shell.adminSubtitle"),
       [
-        { key: "dashboard", label: "Dashboard" },
-        { key: "staff", label: "Isci hesablar" },
-        { key: "doctors", label: "Hekimler" },
-        { key: "patients", label: "Pasiyentler" },
-        { key: "appointments", label: "Randevular" }
+        { key: "dashboard", label: t("sidebar.dashboard") },
+        { key: "staff", label: t("sidebar.staff") },
+        { key: "doctors", label: t("sidebar.doctors") },
+        { key: "patients", label: t("sidebar.patients") },
+        { key: "appointments", label: t("sidebar.appointments") },
+        { key: "settings", label: t("sidebar.settings") }
       ],
       <>
         <header className="topbar">
           <div>
             <span className="eyebrow">Yalnız admin</span>
             <h1>Sistem idarəsi bir yerdə</h1>
-            <p>Isci hesablarini acin, yeni hekim elave edin, qebul axinini izleyin.</p>
+            <p>{t("admin.description")}</p>
           </div>
           <div className="topbar-actions">
             <button type="button" onClick={() => void loadAdminData()}>
@@ -1050,27 +1103,27 @@ export function RolePortal() {
 
         {section === "dashboard" ? (
           <section className="metrics-grid">
-            <article className="metric-card"><span>Toplam sorgu</span><strong>{metrics.totalRequests}</strong><p>Canli API statistikasi</p></article>
-            <article className="metric-card"><span>Xeta sayi</span><strong>{metrics.totalErrors}</strong><p>Izleme paneli</p></article>
-            <article className="metric-card"><span>Orta cavab</span><strong>{metrics.averageResponseMs} ms</strong><p>Gecikme gostericisi</p></article>
-            <article className="metric-card"><span>P95</span><strong>{metrics.p95ResponseMs} ms</strong><p>Yuklenme serhedi</p></article>
+            <article className="metric-card"><span>Toplam sorğu</span><strong>{metrics.totalRequests}</strong><p>Canlı API statistikası</p></article>
+            <article className="metric-card"><span>Xəta sayı</span><strong>{metrics.totalErrors}</strong><p>İzləmə paneli</p></article>
+            <article className="metric-card"><span>Orta cavab</span><strong>{metrics.averageResponseMs} ms</strong><p>Gecikmə göstəricisi</p></article>
+            <article className="metric-card"><span>P95</span><strong>{metrics.p95ResponseMs} ms</strong><p>Yüklənmə sərhədi</p></article>
           </section>
         ) : null}
 
         {section === "staff" ? (
           <section className="content-grid lower-grid">
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Isci hesabi</span><h2>Yeni personel yarat</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">Isçi hesabı</span><h2>Yeni personal yarat</h2></div></div>
               <div className="form-grid">
-                <label>E-poct<input value={staffForm.email} onChange={(event) => setStaffForm((current) => ({ ...current, email: event.target.value }))} /></label>
-                <label>Sifre<input type="password" value={staffForm.password} onChange={(event) => setStaffForm((current) => ({ ...current, password: event.target.value }))} /></label>
-                <label>Rol<select value={staffForm.role} onChange={(event) => setStaffForm((current) => ({ ...current, role: event.target.value }))}><option value="CALL_CENTER">Qeydiyyat</option><option value="NURSE">Tibb bacisi</option><option value="ADMIN">Admin</option></select></label>
+                <label>E-poçt<input value={staffForm.email} onChange={(event) => setStaffForm((current) => ({ ...current, email: event.target.value }))} /></label>
+                <label>Şifrə<input type="password" value={staffForm.password} onChange={(event) => setStaffForm((current) => ({ ...current, password: event.target.value }))} /></label>
+                <label>Rol<select value={staffForm.role} onChange={(event) => setStaffForm((current) => ({ ...current, role: event.target.value }))}><option value="CALL_CENTER">Qeydiyyat</option><option value="NURSE">Tibb bacısı</option><option value="ADMIN">Admin</option></select></label>
               </div>
-              <button type="button" onClick={() => void createStaff()}>Isci hesabi yarat</button>
+              <button type="button" onClick={() => void createStaff()}>Isçi hesabı yarat</button>
             </article>
 
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Eski calisanlar</span><h2>Aktiv ve deaktiv isciler</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">Keçmiş əməkdaşlar</span><h2>Aktiv və deaktiv işçilər</h2></div></div>
               <div className="stack-list">
                 {activeEmployees.map((item) => (
                   <div key={item.id} className="report-item">
@@ -1082,7 +1135,10 @@ export function RolePortal() {
                 {formerEmployees.map((item) => (
                   <div key={item.id} className="report-item">
                     <strong>{item.email}</strong>
-                    <p>{roleLabel(item.role)} • Eski calisan</p>
+                    <p>{roleLabel(item.role)} • Keçmiş əməkdaş</p>
+                    <button type="button" className="danger-button" onClick={() => void deleteStaff(item.id)}>
+                      Sil
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1093,21 +1149,21 @@ export function RolePortal() {
         {section === "doctors" ? (
           <section className="content-grid lower-grid">
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Hekim idaresi</span><h2>Yeni hekim yarat</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">Həkim idarəsi</span><h2>Yeni həkim yarat</h2></div></div>
               <div className="form-grid">
-                <label>E-poct<input value={doctorCreateForm.email} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
-                <label>Sifre<input type="password" value={doctorCreateForm.password} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
+                <label>E-poçt<input value={doctorCreateForm.email} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
+                <label>Şifrə<input type="password" value={doctorCreateForm.password} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
                 <label>Unvan<input value={doctorCreateForm.title} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, title: event.target.value }))} /></label>
                 <label>Ad<input value={doctorCreateForm.firstName} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, firstName: event.target.value }))} /></label>
                 <label>Soyad<input value={doctorCreateForm.lastName} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, lastName: event.target.value }))} /></label>
-                <label>Sobe<input value={doctorCreateForm.branch} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, branch: event.target.value }))} /></label>
+                <label>Şöbə<input value={doctorCreateForm.branch} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, branch: event.target.value }))} /></label>
                 <label>Otaq<input value={doctorCreateForm.roomNumber} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, roomNumber: event.target.value }))} /></label>
               </div>
-              <button type="button" onClick={() => void createDoctor()}>Hekim elave et</button>
+              <button type="button" onClick={() => void createDoctor()}>{t("buttons.addDoctor")}</button>
             </article>
 
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Hekimler</span><h2>Aktiv ve eski hekimler</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">Həkimlər</span><h2>Aktiv və keçmiş həkimlər</h2></div></div>
               <div className="stack-list">
                 {activeDoctors.map((doctor) => (
                   <div key={doctor.id} className="report-item">
@@ -1119,7 +1175,10 @@ export function RolePortal() {
                 {formerDoctors.map((doctor) => (
                   <div key={doctor.id} className="report-item">
                     <strong>{doctor.fullName}</strong>
-                    <p>{doctor.branch}{doctor.roomNumber ? ` • Otaq ${doctor.roomNumber}` : ""} • Eski calisan</p>
+                    <p>{doctor.branch}{doctor.roomNumber ? ` • Otaq ${doctor.roomNumber}` : ""} • Keçmiş əməkdaş</p>
+                    <button type="button" className="danger-button" onClick={() => void deleteDoctor(doctor.id)}>
+                      Sil
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1130,18 +1189,18 @@ export function RolePortal() {
         {section === "patients" ? (
           <section className="content-grid lower-grid">
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Qebul axini</span><h2>Yeni pasiyent qeydiyyati</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">Qəbul axını</span><h2>Yeni pasiyent qeydiyyatı</h2></div></div>
               <div className="form-grid">
-                <label>E-poct<input value={patientCreateForm.email} onChange={(event) => setPatientCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
-                <label>Sifre<input type="password" value={patientCreateForm.password} onChange={(event) => setPatientCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
-                <label>Sexsiyyet nomresi<input value={patientCreateForm.identityNumber} onChange={(event) => setPatientCreateForm((current) => ({ ...current, identityNumber: event.target.value }))} /></label>
+                <label>E-poçt<input value={patientCreateForm.email} onChange={(event) => setPatientCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
+                <label>Şifrə<input type="password" value={patientCreateForm.password} onChange={(event) => setPatientCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
+                <label>Şəxsiyyət nömrəsi<input value={patientCreateForm.identityNumber} onChange={(event) => setPatientCreateForm((current) => ({ ...current, identityNumber: event.target.value }))} /></label>
                 <label>Telefon<input value={patientCreateForm.phone} onChange={(event) => setPatientCreateForm((current) => ({ ...current, phone: event.target.value }))} /></label>
                 <label>Ad<input value={patientCreateForm.firstName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, firstName: event.target.value }))} /></label>
                 <label>Soyad<input value={patientCreateForm.lastName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, lastName: event.target.value }))} /></label>
-                <label>Cins<select value={patientCreateForm.gender} onChange={(event) => setPatientCreateForm((current) => ({ ...current, gender: event.target.value }))}><option value="FEMALE">Qadin</option><option value="MALE">Kisi</option><option value="OTHER">Diger</option></select></label>
-                <label>Dogum tarixi<input type="date" value={patientCreateForm.birthDate} onChange={(event) => setPatientCreateForm((current) => ({ ...current, birthDate: event.target.value }))} /></label>
+                <label>Cins<select value={patientCreateForm.gender} onChange={(event) => setPatientCreateForm((current) => ({ ...current, gender: event.target.value }))}><option value="FEMALE">Qadın</option><option value="MALE">Kişi</option><option value="OTHER">Digər</option></select></label>
+                <label>Doğum tarixi<input type="date" value={patientCreateForm.birthDate} onChange={(event) => setPatientCreateForm((current) => ({ ...current, birthDate: event.target.value }))} /></label>
               </div>
-              <button type="button" onClick={() => void createPatient()}>Pasiyent elave et</button>
+              <button type="button" onClick={() => void createPatient()}>{t("buttons.addPatient")}</button>
             </article>
 
             <article className="panel-card">
@@ -1158,7 +1217,7 @@ export function RolePortal() {
         {section === "appointments" ? (
           <section className="content-grid lower-grid">
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Randevular</span><h2>Yaxin teqvim</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">Randevular</span><h2>Yaxın təqvim</h2></div></div>
               <div className="appointment-list">
                 {appointments.map((appointment) => (
                   <div key={appointment.id} className="appointment-row"><div><strong>{appointment.doctorName}</strong><p>{appointment.branch} • {formatDate(appointment.startsAt)}</p></div><div className="appointment-meta"><span>{channelLabel(appointment.channel)}</span><span data-status={appointment.status}>{statusLabel(appointment.status)}</span></div></div>
@@ -1166,6 +1225,20 @@ export function RolePortal() {
               </div>
             </article>
           </section>
+        ) : null}
+
+        {section === "settings" ? (
+        <section className="content-grid lower-grid">
+          <article className="panel-card">
+            <div className="panel-head"><div><span className="eyebrow">Hesab tənzimləmələri</span><h2>Şifrə dəyişdirmə</h2></div></div>
+            <div className="form-grid single">
+              <label>Cari şifrə<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
+              <label>Yeni şifrə<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
+              <label>Şifrə təsdiqi<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+            </div>
+            <button type="button" onClick={() => void changePassword()}>Şifrəni dəyişdir</button>
+          </article>
+        </section>
         ) : null}
       </>
     );
@@ -1175,21 +1248,22 @@ export function RolePortal() {
     const section = activeSection || "register";
 
     return renderShell(
-      "Qeydiyyat paneli",
-      "Kimlik yoxlama və yönləndirmə",
+      t("shell.deskTitle"),
+      t("shell.deskSubtitle"),
       [
-        { key: "register", label: "Pasiyent qeydiyyati" },
-        { key: "appointments", label: "Randevu planlama" },
-        { key: "doctors", label: "Hekim axini" }
+        { key: "register", label: t("sidebar.register") },
+        { key: "appointments", label: t("sidebar.doBooking") },
+        { key: "doctors", label: t("sidebar.doctorFlow") },
+        { key: "settings", label: t("sidebar.settings") }
       ],
       <>
         <header className="topbar">
           <div>
-            <span className="eyebrow">Qeydiyyat masası</span>
-            <h1>Kimliyi al, həkimi seç, çakışmanı önlə</h1>
-            <p>Qəbul işçiləri pasiyentin kimlik bilgisi ilə hesab açır, həkim və saat seçərək düzgün qeyd aparır.</p>
+            <span className="eyebrow">{t("landing.cards.frontdesk.title")}</span>
+            <h1>{t("forms.patientRegistration")}</h1>
+            <p>{t("auth.descriptions.staffIntro")}</p>
           </div>
-          <div className="topbar-actions"><button type="button" onClick={() => void loadFrontdeskData()}>Yenilə</button></div>
+          <div className="topbar-actions"><button type="button" onClick={() => void loadFrontdeskData()}>{t("auth.buttons.login", "Yenilə")}</button></div>
         </header>
 
         {section === "register" ? (
@@ -1208,7 +1282,7 @@ export function RolePortal() {
           </article>
 
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Son qeydiyyatlar</span><h2>Yeni pasiyentler</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">Son qeydiyyatlar</span><h2>Yeni pasiyentlər</h2></div></div>
             <div className="stack-list">
               {patients.slice(0, 8).map((patient) => (
                 <div key={patient.id} className="report-item"><strong>{patient.fullName}</strong><p>{patient.identityNumber} • {patient.phone}</p></div>
@@ -1246,6 +1320,20 @@ export function RolePortal() {
           </article>
         </section>
         ) : null}
+
+        {section === "settings" ? (
+        <section className="content-grid lower-grid">
+          <article className="panel-card">
+            <div className="panel-head"><div><span className="eyebrow">Hesab tənzimləmələri</span><h2>Şifrə dəyişdirmə</h2></div></div>
+            <div className="form-grid single">
+              <label>Cari şifrə<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
+              <label>Yeni şifrə<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
+              <label>Şifrə təsdiqi<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+            </div>
+            <button type="button" onClick={() => void changePassword()}>Şifrəni dəyişdir</button>
+          </article>
+        </section>
+        ) : null}
       </>
     );
   }
@@ -1254,23 +1342,24 @@ export function RolePortal() {
     const section = activeSection || "appointments";
 
     return renderShell(
-      "Həkim paneli",
-      "Günün pasiyent axını",
+      t("shell.doctorTitle"),
+      t("shell.doctorSubtitle"),
       [
-        { key: "appointments", label: "Randevularim" },
-        { key: "patients", label: "Pasiyent kartlari" },
-        { key: "records", label: "Teyinat ve qeyd" }
+        { key: "appointments", label: t("sidebar.appointments") },
+        { key: "patients", label: t("sidebar.profile") },
+        { key: "records", label: t("sidebar.reports") },
+        { key: "settings", label: t("sidebar.settings") }
       ],
       <>
         <header className="topbar">
           <div>
-            <span className="eyebrow">Həkim görünüşü</span>
+            <span className="eyebrow">{t("landing.cards.doctor.title")}</span>
             <h1>{doctorDashboard?.doctor.fullName}</h1>
             <p>
               {doctorDashboard?.doctor.branch}{doctorDashboard?.doctor.roomNumber ? ` • Otaq ${doctorDashboard.doctor.roomNumber}` : ""}
             </p>
           </div>
-          <div className="topbar-actions"><button type="button" onClick={() => void loadDoctorData()}>Yenilə</button></div>
+          <div className="topbar-actions"><button type="button" onClick={() => void loadDoctorData()}>{t("auth.buttons.refresh", "Yenilə")}</button></div>
         </header>
 
         {section === "appointments" ? (
@@ -1329,7 +1418,7 @@ export function RolePortal() {
           </article>
 
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Secili pasiyent</span><h2>Tibbi tarixce</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">Seçilmiş pasiyent</span><h2>Tibbi tarixçə</h2></div></div>
             <div className="stack-list">
               {doctorPatientDetails?.medicalRecords.map((record) => (
                 <div key={record.id} className="report-item"><strong>{record.diagnosis}</strong><p>{record.prescribedBy} • {record.treatmentPlan}</p></div>
@@ -1353,6 +1442,20 @@ export function RolePortal() {
           </article>
         </section>
         ) : null}
+
+        {section === "settings" ? (
+        <section className="content-grid lower-grid">
+          <article className="panel-card">
+            <div className="panel-head"><div><span className="eyebrow">Hesab tənzimləmələri</span><h2>Şifrə dəyişdirmə</h2></div></div>
+            <div className="form-grid single">
+              <label>Cari şifrə<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
+              <label>Yeni şifrə<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
+              <label>Şifrə təsdiqi<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+            </div>
+            <button type="button" onClick={() => void changePassword()}>Şifrəni dəyişdir</button>
+          </article>
+        </section>
+        ) : null}
       </>
     );
   }
@@ -1361,22 +1464,22 @@ export function RolePortal() {
     const section = activeSection || "booking";
 
     return renderShell(
-      "Pasiyent portalı",
-      "Şəxsi randevu və rapor görünüşü",
+      t("shell.patientTitle"),
+      t("shell.patientSubtitle"),
       [
-        { key: "booking", label: "Yeni randevu" },
-        { key: "profile", label: "Profil" },
-        { key: "history", label: "Kecmis gorusler" },
-        { key: "reports", label: "Rapor ve reseptler" }
+        { key: "booking", label: t("sidebar.doBooking") },
+        { key: "profile", label: t("sidebar.profile") },
+        { key: "history", label: t("sidebar.history") },
+        { key: "reports", label: t("sidebar.reports") }
       ],
       <>
         <header className="topbar">
           <div>
-            <span className="eyebrow">Şəxsi hesab</span>
+            <span className="eyebrow">{t("landing.cards.patient.title")}</span>
             <h1>{patientPortal?.fullName}</h1>
             <p>{patientPortal?.identityNumber} • {patientPortal?.phone}</p>
           </div>
-          <div className="topbar-actions"><button type="button" onClick={() => void loadPatientData()}>Yenilə</button></div>
+          <div className="topbar-actions"><button type="button" onClick={() => void loadPatientData()}>{t("auth.buttons.refresh", "Yenilə")}</button></div>
         </header>
 
         {section === "booking" || section === "profile" ? (

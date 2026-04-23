@@ -9,6 +9,9 @@
       "eas": {
         "projectId": "47970f9e-8c50-4624-bfd0-973654282515"
       }
+    },
+    "android": {
+      "package": "com.dasdanstudio.hospitalmobile"
     }
   }
 }

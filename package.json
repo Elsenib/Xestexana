@@ -10,7 +10,9 @@
     "dev:api": "npm run dev --workspace api",
     "dev:web": "npm run dev --workspace web",
     "dev:mobile": "npm run start --workspace mobile",
+    "dev:desktop": "npm run start --workspace desktop",
     "build": "npm run build --workspaces --if-present",
+    "build:desktop": "npm run build --workspace desktop",
     "lint": "npm run lint --workspaces --if-present",
     "db:generate": "npx prisma generate",
     "db:migrate": "npx prisma migrate dev",
@@ -19,5 +21,10 @@
   "devDependencies": {
     "prisma": "^6.7.0",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~5.0.5",
+    "fbjs": "^3.0.5",
+    "react-native-web": "^0.21.2"
   }
 }
