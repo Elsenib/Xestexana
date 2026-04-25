@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { LOCALES, type Locale, useLocale } from "./LocaleProvider";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
 type SubscriptionPlan = "basic" | "professional" | "enterprise";
 
 interface SubscriptionPlanData {
