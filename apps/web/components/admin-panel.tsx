@@ -58,34 +58,12 @@ function formatDate(dateIso: string) {
   }).format(new Date(dateIso));
 }
 
-function statusLabel(status: AppointmentSummary["status"]) {
-  switch (status) {
-    case "CONFIRMED":
-      return "Təsdiqlənib";
-    case "PENDING":
-      return "Gözləyir";
-    case "COMPLETED":
-      return "Tamamlanıb";
-    case "CANCELED":
-      return "Ləğv edilib";
-    case "NO_SHOW":
-      return "Gəlməyib";
-    default:
-      return status;
-  }
+function statusLabel(status: AppointmentSummary["status"], t: (key: string, fallback?: string) => string) {
+  return t(`status.${status}`, status);
 }
 
-function channelLabel(channel: string) {
-  switch (channel) {
-    case "web":
-      return "Veb";
-    case "mobile":
-      return "Mobil";
-    case "call-center":
-      return "Çağrı mərkəzi";
-    default:
-      return channel;
-  }
+function channelLabel(channel: string, t: (key: string, fallback?: string) => string) {
+  return t(`channel.${channel}`, channel);
 }
 
 export function AdminPanel() {
@@ -838,8 +816,8 @@ export function AdminPanel() {
                     </p>
                   </div>
                   <div className="appointment-meta">
-                    <span>{channelLabel(appointment.channel)}</span>
-                    <span data-status={appointment.status}>{statusLabel(appointment.status)}</span>
+                    <span>{channelLabel(appointment.channel, t)}</span>
+                    <span data-status={appointment.status}>{statusLabel(appointment.status, t)}</span>
                   </div>
                 </div>
               ))}

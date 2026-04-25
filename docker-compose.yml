@@ -21,5 +21,23 @@ services:
     ports:
       - "6379:6379"
 
+  api:
+    build: ./apps/api
+    container_name: hospital-api
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/hospital_platform
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - API_PORT=4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+
 volumes:
   postgres-data:

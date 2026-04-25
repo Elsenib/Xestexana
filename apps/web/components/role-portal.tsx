@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { LOCALES, type Locale, useLocale } from "./LocaleProvider";
+import jsPDF from "jspdf";
+import { loadPDFTemplate, savePDFTemplate, type PDFTemplate } from "./PDFTemplate";
+import { SubscriptionManager } from "./SubscriptionManager";
 
 type UserRole = "ADMIN" | "DOCTOR" | "NURSE" | "PATIENT" | "CALL_CENTER";
 
@@ -68,7 +71,23 @@ type MedicalRecordRow = {
   treatmentPlan: string;
   prescribedBy: string;
   createdAt: string;
+  reportType?: string;
+  testResults?: TestResult[];
+  attachments?: string[];
 };
+
+type TestStatus = "normal" | "high" | "low" | "critical";
+
+type TestResult = {
+  id: string;
+  testName: string;
+  value: string;
+  unit: string;
+  referenceRange: string;
+  status: TestStatus;
+};
+
+type ReportType = "general" | "blood-test" | "x-ray" | "ultrasound" | "ecg" | "biopsy" | "consultation";
 
 type PatientDetails = {
   id: string;
@@ -135,7 +154,7 @@ function toInputDateTime(offsetHours: number) {
 export function RolePortal() {
   const [token, setToken] = useState("");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [authMode, setAuthMode] = useState<"patient-login" | "patient-register" | "staff-login" | "bootstrap" | "reset-password">(
+  const [authMode, setAuthMode] = useState<"patient-login" | "patient-register" | "staff-login" | "admin-login" | "bootstrap" | "reset-password">(
     "patient-login"
   );
   const [loading, setLoading] = useState(false);
@@ -251,12 +270,25 @@ export function RolePortal() {
   const [medicalRecordForm, setMedicalRecordForm] = useState({
     patientId: "",
     diagnosis: "",
-    treatmentPlan: ""
+    treatmentPlan: "",
+    reportType: "general" as ReportType,
+    testResults: [] as TestResult[],
+    attachments: [] as string[]
   });
   const [changePasswordForm, setChangePasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: ""
+  });
+  const [pdfTemplateForm, setPdfTemplateForm] = useState({
+    hospitalName: "",
+    hospitalAddress: "",
+    hospitalPhone: "",
+    hospitalLogo: "",
+    doctorTitle: "",
+    doctorSignature: "",
+    footerText: "",
+    language: "az" as "az" | "en" | "ru" | "tr"
   });
 
   async function requestJson<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
@@ -783,11 +815,267 @@ export function RolePortal() {
       setMedicalRecordForm((current) => ({
         ...current,
         diagnosis: "",
-        treatmentPlan: ""
+        treatmentPlan: "",
+        reportType: "general",
+        testResults: [],
+        attachments: []
       }));
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : t("messages.medicalRecordCreateError"));
     }
+  }
+
+  function addTestResult() {
+    const newTestResult: TestResult = {
+      id: Date.now().toString(),
+      testName: "",
+      value: "",
+      unit: "",
+      referenceRange: "",
+      status: "normal"
+    };
+    setMedicalRecordForm((current) => ({
+      ...current,
+      testResults: [...current.testResults, newTestResult]
+    }));
+  }
+
+  function updateTestResult(index: number, field: keyof TestResult, value: string) {
+    setMedicalRecordForm((current) => ({
+      ...current,
+      testResults: current.testResults.map((test, i) =>
+        i === index ? { ...test, [field]: value } : test
+      )
+    }));
+  }
+
+  function removeTestResult(index: number) {
+    setMedicalRecordForm((current) => ({
+      ...current,
+      testResults: current.testResults.filter((_, i) => i !== index)
+    }));
+  }
+
+  async function downloadReport() {
+    resetFeedback();
+
+    try {
+      // Get patient details
+      const selectedPatient = doctorDashboard?.patients.find(p => p.id === medicalRecordForm.patientId);
+      if (!selectedPatient) {
+        setError("Xəstə tapılmadı.");
+        return;
+      }
+
+      // Load PDF template
+      const template = loadPDFTemplate();
+
+      const doc = new jsPDF();
+
+      // Header
+      doc.setFontSize(20);
+      doc.setFont("helvetica", "bold");
+      doc.text("TIBBİ RAPOR", 105, 20, { align: "center" });
+
+      let yPosition = 40;
+
+      // Hospital info
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+
+      // Add hospital logo if exists
+      if (template.hospitalLogo) {
+        try {
+          // Load image from URL and add to PDF
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+
+          await new Promise((resolve, reject) => {
+            img.onload = () => {
+              // Add image to PDF (x, y, width, height)
+              doc.addImage(img, 'PNG', 20, yPosition, 30, 30);
+              yPosition += 35;
+              resolve(true);
+            };
+            img.onerror = () => {
+              // If image fails to load, show placeholder text
+              doc.setFontSize(14);
+              doc.setFont("helvetica", "bold");
+              doc.text("🏥 [Klinik Logosu]", 20, yPosition);
+              yPosition += 15;
+              doc.setFontSize(12);
+              doc.setFont("helvetica", "normal");
+              resolve(true);
+            };
+            img.src = template.hospitalLogo || "";
+          });
+        } catch (logoError) {
+          console.warn("Logo yüklenemedi:", logoError);
+          // Fallback to text placeholder
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.text("🏥 [Klinik Logosu]", 20, yPosition);
+          yPosition += 15;
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "normal");
+        }
+      }
+
+      doc.text(`${template.hospitalName}`, 20, yPosition);
+      yPosition += 10;
+
+      if (template.hospitalAddress) {
+        doc.text(`Ünvan: ${template.hospitalAddress}`, 20, yPosition);
+        yPosition += 10;
+      }
+
+      if (template.hospitalPhone) {
+        doc.text(`Telefon: ${template.hospitalPhone}`, 20, yPosition);
+        yPosition += 10;
+      }
+
+      doc.text(`Tarix: ${new Date().toLocaleDateString('az-AZ')}`, 20, yPosition);
+      yPosition += 20;
+
+      // Patient info
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("XƏSTƏ MƏLUMATLARI", 20, yPosition);
+      yPosition += 15;
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Ad Soyad: ${selectedPatient.fullName}`, 20, yPosition);
+      yPosition += 10;
+      doc.text(`Şəxsiyyət Vəsiqəsi №: ${selectedPatient.identityNumber}`, 20, yPosition);
+      yPosition += 10;
+      doc.text(`Diaqnoz: ${medicalRecordForm.diagnosis}`, 20, yPosition);
+      yPosition += 10;
+
+      // Report type
+      const reportTypeLabels = {
+        "general": "Ümumi Hesabat",
+        "blood-test": "Qan Analizi",
+        "x-ray": "Rentgen",
+        "ultrasound": "Ultrason",
+        "ecg": "EKG",
+        "biopsy": "Biyopsiya",
+        "consultation": "Məsləhətləşmə"
+      };
+      doc.text(`Hesabat Növü: ${reportTypeLabels[medicalRecordForm.reportType]}`, 20, yPosition);
+      yPosition += 20;
+
+      // Treatment plan
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("MÜALİCƏ PLANI", 20, yPosition);
+      yPosition += 15;
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      const treatmentLines = doc.splitTextToSize(medicalRecordForm.treatmentPlan, 170);
+      doc.text(treatmentLines, 20, yPosition);
+      yPosition += treatmentLines.length * 5 + 10;
+
+      // Test results if blood test
+      if (medicalRecordForm.reportType === "blood-test" && medicalRecordForm.testResults.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("ANALİZ NƏTİCƏLƏRİ", 20, yPosition);
+        yPosition += 15;
+
+        // Table header
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("Analiz Adı", 20, yPosition);
+        doc.text("Dəyər", 80, yPosition);
+        doc.text("Vahid", 110, yPosition);
+        doc.text("Referans", 130, yPosition);
+        doc.text("Vəziyyət", 170, yPosition);
+        yPosition += 8;
+
+        // Table rows
+        doc.setFont("helvetica", "normal");
+        medicalRecordForm.testResults.forEach((test) => {
+          doc.text(test.testName, 20, yPosition);
+          doc.text(test.value, 80, yPosition);
+          doc.text(test.unit, 110, yPosition);
+          doc.text(test.referenceRange, 130, yPosition);
+
+          // Status with color
+          const statusText = {
+            "normal": "Normal",
+            "high": "Yüksək",
+            "low": "Aşağı",
+            "critical": "Təhlükəli"
+          }[test.status];
+
+          doc.text(statusText, 170, yPosition);
+          yPosition += 8;
+        });
+        yPosition += 10;
+      }
+
+      // Custom fields from template
+      if (template.customFields && template.customFields.length > 0) {
+        template.customFields.forEach(field => {
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "normal");
+          doc.text(`${field.label}: ${field.value}`, 20, yPosition);
+          yPosition += 10;
+        });
+        yPosition += 10;
+      }
+
+      // Doctor signature
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${template.doctorTitle}: ${doctorDashboard?.doctor.fullName}`, 20, yPosition);
+      yPosition += 10;
+      doc.text(`İxtisas: ${doctorDashboard?.doctor.branch}`, 20, yPosition);
+      yPosition += 15;
+      doc.text(template.doctorSignature, 20, yPosition);
+
+      // Footer
+      if (template.footerText) {
+        const pageHeight = doc.internal.pageSize.height;
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "italic");
+        doc.text(template.footerText, 20, pageHeight - 20);
+      }
+
+      // Save PDF
+      const fileName = `hesabat_${selectedPatient.fullName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+
+      setMessage("PDF hesabat uğurla yükləndi.");
+    } catch (error) {
+      setError("PDF yaratma zamanı xəta baş verdi: " + (error instanceof Error ? error.message : "Naməlum xəta"));
+    }
+  }
+
+  async function shareReport(method: "email" | "whatsapp") {
+    // Sharing logic will be implemented here
+    setMessage(`${method === "email" ? "E-posta" : "WhatsApp"} ilə paylaşım xüsusiyyəti yaxında əlavə ediləcək.`);
+  }
+
+  function loadPDFTemplateSettings() {
+    const template = loadPDFTemplate();
+    setPdfTemplateForm({
+      hospitalName: template.hospitalName,
+      hospitalAddress: template.hospitalAddress || "",
+      hospitalPhone: template.hospitalPhone || "",
+      hospitalLogo: template.hospitalLogo || "",
+      doctorTitle: template.doctorTitle,
+      doctorSignature: template.doctorSignature,
+      footerText: template.footerText || "",
+      language: template.language
+    });
+  }
+
+  function savePDFTemplateSettings() {
+    savePDFTemplate(pdfTemplateForm);
+    setMessage("PDF şablon ayarları uğurla yadda saxlanıldı.");
   }
 
   function logout() {
@@ -815,6 +1103,12 @@ export function RolePortal() {
           <button type="button" className={authMode === "staff-login" ? "ghost-button active-chip" : "ghost-button"} onClick={() => setAuthMode("staff-login")}>
             {t("auth.tabs.staffLogin")}
           </button>
+          {/* Admin login - sadece admin görebilir */}
+          {globalThis.window?.location.search.includes('admin=true') && (
+            <button type="button" className={authMode === "admin-login" ? "ghost-button active-chip" : "ghost-button"} onClick={() => setAuthMode("admin-login")}>
+              Admin Girişi
+            </button>
+          )}
           <button type="button" className={authMode === "bootstrap" ? "ghost-button active-chip" : "ghost-button"} onClick={() => setAuthMode("bootstrap")}>
             {t("auth.tabs.bootstrap")}
           </button>
@@ -823,11 +1117,23 @@ export function RolePortal() {
           </button>
         </div>
 
-        {authMode === "patient-login" || authMode === "staff-login" ? (
+        {authMode === "patient-login" || authMode === "staff-login" || authMode === "admin-login" ? (
           <>
             <span className="eyebrow">{t("auth.headings.secureLogin")}</span>
-            <h2>{authMode === "patient-login" ? t("auth.headings.patientPortal") : t("auth.headings.staffPortal")}</h2>
-            <p>{t("auth.descriptions.staffIntro")}</p>
+            <h2>
+              {authMode === "patient-login" 
+                ? t("auth.headings.patientPortal") 
+                : authMode === "admin-login" 
+                  ? "Admin Paneli" 
+                  : t("auth.headings.staffPortal")
+              }
+            </h2>
+            <p>
+              {authMode === "admin-login" 
+                ? "Sadece yöneticiler için giriş sayfası" 
+                : t("auth.descriptions.staffIntro")
+              }
+            </p>
             <div className="form-grid single">
               <label>
                 {t("auth.form.email")}
@@ -1081,6 +1387,7 @@ export function RolePortal() {
       t("shell.adminSubtitle"),
       [
         { key: "dashboard", label: t("sidebar.dashboard") },
+        { key: "subscription", label: "Abonelik Yönetimi" },
         { key: "staff", label: t("sidebar.staff") },
         { key: "doctors", label: t("sidebar.doctors") },
         { key: "patients", label: t("sidebar.patients") },
@@ -1090,54 +1397,54 @@ export function RolePortal() {
       <>
         <header className="topbar">
           <div>
-            <span className="eyebrow">Yalnız admin</span>
-            <h1>Sistem idarəsi bir yerdə</h1>
+            <span className="eyebrow">{t("admin.topbarEyebrow")}</span>
+            <h1>{t("admin.topbarTitle")}</h1>
             <p>{t("admin.description")}</p>
           </div>
           <div className="topbar-actions">
             <button type="button" onClick={() => void loadAdminData()}>
-              Yenilə
+              {t("auth.buttons.refresh")}
             </button>
           </div>
         </header>
 
         {section === "dashboard" ? (
           <section className="metrics-grid">
-            <article className="metric-card"><span>Toplam sorğu</span><strong>{metrics.totalRequests}</strong><p>Canlı API statistikası</p></article>
-            <article className="metric-card"><span>Xəta sayı</span><strong>{metrics.totalErrors}</strong><p>İzləmə paneli</p></article>
-            <article className="metric-card"><span>Orta cavab</span><strong>{metrics.averageResponseMs} ms</strong><p>Gecikmə göstəricisi</p></article>
-            <article className="metric-card"><span>P95</span><strong>{metrics.p95ResponseMs} ms</strong><p>Yüklənmə sərhədi</p></article>
+            <article className="metric-card"><span>{t("metrics.totalRequests")}</span><strong>{metrics.totalRequests}</strong><p>{t("metrics.liveData")}</p></article>
+            <article className="metric-card"><span>{t("metrics.totalErrors")}</span><strong>{metrics.totalErrors}</strong><p>{t("metrics.trace")}</p></article>
+            <article className="metric-card"><span>{t("metrics.averageResponseMs")}</span><strong>{metrics.averageResponseMs} ms</strong><p>{t("metrics.latency")}</p></article>
+            <article className="metric-card"><span>{t("metrics.p95")}</span><strong>{metrics.p95ResponseMs} ms</strong><p>{t("metrics.load")}</p></article>
           </section>
         ) : null}
 
         {section === "staff" ? (
           <section className="content-grid lower-grid">
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Isçi hesabı</span><h2>Yeni personal yarat</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">{t("admin.staffSection")}</span><h2>{t("forms.newStaff")}</h2></div></div>
               <div className="form-grid">
-                <label>E-poçt<input value={staffForm.email} onChange={(event) => setStaffForm((current) => ({ ...current, email: event.target.value }))} /></label>
-                <label>Şifrə<input type="password" value={staffForm.password} onChange={(event) => setStaffForm((current) => ({ ...current, password: event.target.value }))} /></label>
-                <label>Rol<select value={staffForm.role} onChange={(event) => setStaffForm((current) => ({ ...current, role: event.target.value }))}><option value="CALL_CENTER">Qeydiyyat</option><option value="NURSE">Tibb bacısı</option><option value="ADMIN">Admin</option></select></label>
+                <label>{t("auth.form.email")}<input value={staffForm.email} onChange={(event) => setStaffForm((current) => ({ ...current, email: event.target.value }))} /></label>
+                <label>{t("auth.form.password")}<input type="password" value={staffForm.password} onChange={(event) => setStaffForm((current) => ({ ...current, password: event.target.value }))} /></label>
+                <label>{t("auth.form.role")}<select value={staffForm.role} onChange={(event) => setStaffForm((current) => ({ ...current, role: event.target.value }))}><option value="CALL_CENTER">{t("roles.CALL_CENTER")}</option><option value="NURSE">{t("roles.NURSE")}</option><option value="ADMIN">{t("roles.ADMIN")}</option></select></label>
               </div>
-              <button type="button" onClick={() => void createStaff()}>Isçi hesabı yarat</button>
+              <button type="button" onClick={() => void createStaff()}>{t("auth.buttons.createStaff")}</button>
             </article>
 
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Keçmiş əməkdaşlar</span><h2>Aktiv və deaktiv işçilər</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">{t("admin.formerStaff")}</span><h2>{t("admin.activeAndInactiveStaff")}</h2></div></div>
               <div className="stack-list">
                 {activeEmployees.map((item) => (
                   <div key={item.id} className="report-item">
                     <strong>{item.email}</strong>
-                    <p>{roleLabel(item.role)} • Aktiv</p>
-                    <button type="button" className="ghost-button" onClick={() => void deactivateStaff(item.id)}>Deaktiv et</button>
+                    <p>{roleLabel(item.role)} • {t("admin.active")}</p>
+                    <button type="button" className="ghost-button" onClick={() => void deactivateStaff(item.id)}>{t("auth.buttons.deactivate")}</button>
                   </div>
                 ))}
                 {formerEmployees.map((item) => (
                   <div key={item.id} className="report-item">
                     <strong>{item.email}</strong>
-                    <p>{roleLabel(item.role)} • Keçmiş əməkdaş</p>
+                    <p>{roleLabel(item.role)} • {t("admin.formerEmployee")}</p>
                     <button type="button" className="danger-button" onClick={() => void deleteStaff(item.id)}>
-                      Sil
+                      {t("auth.buttons.delete")}
                     </button>
                   </div>
                 ))}
@@ -1149,35 +1456,35 @@ export function RolePortal() {
         {section === "doctors" ? (
           <section className="content-grid lower-grid">
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Həkim idarəsi</span><h2>Yeni həkim yarat</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">{t("admin.doctorManagement")}</span><h2>{t("forms.newDoctor")}</h2></div></div>
               <div className="form-grid">
-                <label>E-poçt<input value={doctorCreateForm.email} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
-                <label>Şifrə<input type="password" value={doctorCreateForm.password} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
-                <label>Unvan<input value={doctorCreateForm.title} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, title: event.target.value }))} /></label>
-                <label>Ad<input value={doctorCreateForm.firstName} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, firstName: event.target.value }))} /></label>
-                <label>Soyad<input value={doctorCreateForm.lastName} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, lastName: event.target.value }))} /></label>
-                <label>Şöbə<input value={doctorCreateForm.branch} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, branch: event.target.value }))} /></label>
-                <label>Otaq<input value={doctorCreateForm.roomNumber} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, roomNumber: event.target.value }))} /></label>
+                <label>{t("auth.form.email")}<input value={doctorCreateForm.email} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
+                <label>{t("auth.form.password")}<input type="password" value={doctorCreateForm.password} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
+                <label>{t("auth.form.title")}<input value={doctorCreateForm.title} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, title: event.target.value }))} /></label>
+                <label>{t("auth.form.firstName")}<input value={doctorCreateForm.firstName} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, firstName: event.target.value }))} /></label>
+                <label>{t("auth.form.lastName")}<input value={doctorCreateForm.lastName} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, lastName: event.target.value }))} /></label>
+                <label>{t("auth.form.branch")}<input value={doctorCreateForm.branch} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, branch: event.target.value }))} /></label>
+                <label>{t("auth.form.roomNumber")}<input value={doctorCreateForm.roomNumber} onChange={(event) => setDoctorCreateForm((current) => ({ ...current, roomNumber: event.target.value }))} /></label>
               </div>
-              <button type="button" onClick={() => void createDoctor()}>{t("buttons.addDoctor")}</button>
+              <button type="button" onClick={() => void createDoctor()}>{t("auth.buttons.addDoctor")}</button>
             </article>
 
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Həkimlər</span><h2>Aktiv və keçmiş həkimlər</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">{t("admin.doctors")}</span><h2>{t("admin.activeAndFormerDoctors")}</h2></div></div>
               <div className="stack-list">
                 {activeDoctors.map((doctor) => (
                   <div key={doctor.id} className="report-item">
                     <strong>{doctor.fullName}</strong>
-                    <p>{doctor.branch}{doctor.roomNumber ? ` • Otaq ${doctor.roomNumber}` : ""} • Aktiv</p>
-                    <button type="button" className="ghost-button" onClick={() => void deactivateDoctor(doctor.id)}>Deaktiv et</button>
+                    <p>{doctor.branch}{doctor.roomNumber ? ` • ${t("admin.doctorRoom")} ${doctor.roomNumber}` : ""} • {t("admin.active")}</p>
+                    <button type="button" className="ghost-button" onClick={() => void deactivateDoctor(doctor.id)}>{t("auth.buttons.deactivate")}</button>
                   </div>
                 ))}
                 {formerDoctors.map((doctor) => (
                   <div key={doctor.id} className="report-item">
                     <strong>{doctor.fullName}</strong>
-                    <p>{doctor.branch}{doctor.roomNumber ? ` • Otaq ${doctor.roomNumber}` : ""} • Keçmiş əməkdaş</p>
+                    <p>{doctor.branch}{doctor.roomNumber ? ` • ${t("admin.doctorRoom")} ${doctor.roomNumber}` : ""} • {t("admin.formerEmployee")}</p>
                     <button type="button" className="danger-button" onClick={() => void deleteDoctor(doctor.id)}>
-                      Sil
+                      {t("auth.buttons.delete")}
                     </button>
                   </div>
                 ))}
@@ -1189,22 +1496,22 @@ export function RolePortal() {
         {section === "patients" ? (
           <section className="content-grid lower-grid">
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Qəbul axını</span><h2>Yeni pasiyent qeydiyyatı</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">{t("admin.patientFlow")}</span><h2>{t("admin.newPatientRegistration")}</h2></div></div>
               <div className="form-grid">
-                <label>E-poçt<input value={patientCreateForm.email} onChange={(event) => setPatientCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
-                <label>Şifrə<input type="password" value={patientCreateForm.password} onChange={(event) => setPatientCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
-                <label>Şəxsiyyət nömrəsi<input value={patientCreateForm.identityNumber} onChange={(event) => setPatientCreateForm((current) => ({ ...current, identityNumber: event.target.value }))} /></label>
-                <label>Telefon<input value={patientCreateForm.phone} onChange={(event) => setPatientCreateForm((current) => ({ ...current, phone: event.target.value }))} /></label>
-                <label>Ad<input value={patientCreateForm.firstName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, firstName: event.target.value }))} /></label>
-                <label>Soyad<input value={patientCreateForm.lastName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, lastName: event.target.value }))} /></label>
-                <label>Cins<select value={patientCreateForm.gender} onChange={(event) => setPatientCreateForm((current) => ({ ...current, gender: event.target.value }))}><option value="FEMALE">Qadın</option><option value="MALE">Kişi</option><option value="OTHER">Digər</option></select></label>
-                <label>Doğum tarixi<input type="date" value={patientCreateForm.birthDate} onChange={(event) => setPatientCreateForm((current) => ({ ...current, birthDate: event.target.value }))} /></label>
+                <label>{t("auth.form.email")}<input value={patientCreateForm.email} onChange={(event) => setPatientCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
+                <label>{t("auth.form.password")}<input type="password" value={patientCreateForm.password} onChange={(event) => setPatientCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
+                <label>{t("auth.form.identityNumber")}<input value={patientCreateForm.identityNumber} onChange={(event) => setPatientCreateForm((current) => ({ ...current, identityNumber: event.target.value }))} /></label>
+                <label>{t("auth.form.phone")}<input value={patientCreateForm.phone} onChange={(event) => setPatientCreateForm((current) => ({ ...current, phone: event.target.value }))} /></label>
+                <label>{t("auth.form.firstName")}<input value={patientCreateForm.firstName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, firstName: event.target.value }))} /></label>
+                <label>{t("auth.form.lastName")}<input value={patientCreateForm.lastName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, lastName: event.target.value }))} /></label>
+                <label>{t("auth.form.gender")}<select value={patientCreateForm.gender} onChange={(event) => setPatientCreateForm((current) => ({ ...current, gender: event.target.value }))}><option value="FEMALE">{t("auth.form.genderFemale")}</option><option value="MALE">{t("auth.form.genderMale")}</option><option value="OTHER">{t("auth.form.genderOther")}</option></select></label>
+                <label>{t("auth.form.birthDate")}<input type="date" value={patientCreateForm.birthDate} onChange={(event) => setPatientCreateForm((current) => ({ ...current, birthDate: event.target.value }))} /></label>
               </div>
-              <button type="button" onClick={() => void createPatient()}>{t("buttons.addPatient")}</button>
+              <button type="button" onClick={() => void createPatient()}>{t("auth.buttons.addPatient")}</button>
             </article>
 
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Pasiyent siyahisi</span><h2>Son qeydiyyatlar</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">{t("admin.patientList")}</span><h2>{t("admin.recentRegistrations")}</h2></div></div>
               <div className="stack-list">
                 {patients.slice(0, 10).map((patient) => (
                   <div key={patient.id} className="report-item"><strong>{patient.fullName}</strong><p>{patient.identityNumber} • {patient.phone}</p></div>
@@ -1217,7 +1524,7 @@ export function RolePortal() {
         {section === "appointments" ? (
           <section className="content-grid lower-grid">
             <article className="panel-card">
-              <div className="panel-head"><div><span className="eyebrow">Randevular</span><h2>Yaxın təqvim</h2></div></div>
+              <div className="panel-head"><div><span className="eyebrow">{t("admin.appointments")}</span><h2>{t("admin.upcomingSchedule")}</h2></div></div>
               <div className="appointment-list">
                 {appointments.map((appointment) => (
                   <div key={appointment.id} className="appointment-row"><div><strong>{appointment.doctorName}</strong><p>{appointment.branch} • {formatDate(appointment.startsAt)}</p></div><div className="appointment-meta"><span>{channelLabel(appointment.channel)}</span><span data-status={appointment.status}>{statusLabel(appointment.status)}</span></div></div>
@@ -1227,16 +1534,25 @@ export function RolePortal() {
           </section>
         ) : null}
 
+        {section === "subscription" ? (
+        <section className="content-grid lower-grid">
+          <article className="panel-card">
+            <div className="panel-head"><div><span className="eyebrow">Abonelik Yönetimi</span><h2>Klinik Abonelikleri</h2></div></div>
+            <SubscriptionManager />
+          </article>
+        </section>
+        ) : null}
+
         {section === "settings" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Hesab tənzimləmələri</span><h2>Şifrə dəyişdirmə</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("admin.accountSettings")}</span><h2>{t("admin.changePassword")}</h2></div></div>
             <div className="form-grid single">
-              <label>Cari şifrə<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
-              <label>Yeni şifrə<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
-              <label>Şifrə təsdiqi<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+              <label>{t("auth.form.currentPassword")}<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
+              <label>{t("auth.form.newPassword")}<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
+              <label>{t("auth.form.confirmPassword")}<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
             </div>
-            <button type="button" onClick={() => void changePassword()}>Şifrəni dəyişdir</button>
+            <button type="button" onClick={() => void changePassword()}>{t("auth.buttons.updatePassword")}</button>
           </article>
         </section>
         ) : null}
@@ -1269,20 +1585,20 @@ export function RolePortal() {
         {section === "register" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Yeni pasiyent</span><h2>Qeydiyyat formu</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("admin.newPatient")}</span><h2>{t("auth.descriptions.register")}</h2></div></div>
             <div className="form-grid">
-              <label>E-poçt<input value={patientCreateForm.email} onChange={(event) => setPatientCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
-              <label>Şifrə<input type="password" value={patientCreateForm.password} onChange={(event) => setPatientCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
-              <label>Şəxsiyyət nömrəsi<input value={patientCreateForm.identityNumber} onChange={(event) => setPatientCreateForm((current) => ({ ...current, identityNumber: event.target.value }))} /></label>
-              <label>Telefon<input value={patientCreateForm.phone} onChange={(event) => setPatientCreateForm((current) => ({ ...current, phone: event.target.value }))} /></label>
-              <label>Ad<input value={patientCreateForm.firstName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, firstName: event.target.value }))} /></label>
-              <label>Soyad<input value={patientCreateForm.lastName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, lastName: event.target.value }))} /></label>
+              <label>{t("auth.form.email")}<input value={patientCreateForm.email} onChange={(event) => setPatientCreateForm((current) => ({ ...current, email: event.target.value }))} /></label>
+              <label>{t("auth.form.password")}<input type="password" value={patientCreateForm.password} onChange={(event) => setPatientCreateForm((current) => ({ ...current, password: event.target.value }))} /></label>
+              <label>{t("auth.form.identityNumber")}<input value={patientCreateForm.identityNumber} onChange={(event) => setPatientCreateForm((current) => ({ ...current, identityNumber: event.target.value }))} /></label>
+              <label>{t("auth.form.phone")}<input value={patientCreateForm.phone} onChange={(event) => setPatientCreateForm((current) => ({ ...current, phone: event.target.value }))} /></label>
+              <label>{t("auth.form.firstName")}<input value={patientCreateForm.firstName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, firstName: event.target.value }))} /></label>
+              <label>{t("auth.form.lastName")}<input value={patientCreateForm.lastName} onChange={(event) => setPatientCreateForm((current) => ({ ...current, lastName: event.target.value }))} /></label>
             </div>
-            <button type="button" onClick={() => void createPatient()}>Pasiyenti qeyd et</button>
+            <button type="button" onClick={() => void createPatient()}>{t("auth.buttons.addPatient")}</button>
           </article>
 
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Son qeydiyyatlar</span><h2>Yeni pasiyentlər</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("admin.recentRegistrations")}</span><h2>{t("admin.newPatients")}</h2></div></div>
             <div className="stack-list">
               {patients.slice(0, 8).map((patient) => (
                 <div key={patient.id} className="report-item"><strong>{patient.fullName}</strong><p>{patient.identityNumber} • {patient.phone}</p></div>
@@ -1295,15 +1611,15 @@ export function RolePortal() {
         {section === "appointments" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Həkimə yönləndirmə</span><h2>Çakışmasız randevu yarat</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("admin.frontdeskAppointment")}</span><h2>{t("admin.frontdeskAppointmentTitle")}</h2></div></div>
             <div className="form-grid">
-              <label>Pasiyent<select value={appointmentForm.patientId} onChange={(event) => setAppointmentForm((current) => ({ ...current, patientId: event.target.value }))}><option value="">Seçin</option>{patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.fullName} ({patient.identityNumber})</option>)}</select></label>
-              <label>Həkim<select value={appointmentForm.doctorId} onChange={(event) => setAppointmentForm((current) => ({ ...current, doctorId: event.target.value }))}><option value="">Seçin</option>{doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.fullName} ({doctor.branch})</option>)}</select></label>
-              <label>Başlama<input type="datetime-local" value={appointmentForm.startsAt} onChange={(event) => setAppointmentForm((current) => ({ ...current, startsAt: event.target.value }))} /></label>
-              <label>Bitmə<input type="datetime-local" value={appointmentForm.endsAt} onChange={(event) => setAppointmentForm((current) => ({ ...current, endsAt: event.target.value }))} /></label>
+              <label>{t("auth.form.patient")}<select value={appointmentForm.patientId} onChange={(event) => setAppointmentForm((current) => ({ ...current, patientId: event.target.value }))}><option value="">{t("ui.selectOption")}</option>{patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.fullName} ({patient.identityNumber})</option>)}</select></label>
+              <label>{t("auth.form.doctor")}<select value={appointmentForm.doctorId} onChange={(event) => setAppointmentForm((current) => ({ ...current, doctorId: event.target.value }))}><option value="">{t("ui.selectOption")}</option>{doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.fullName} ({doctor.branch})</option>)}</select></label>
+              <label>{t("auth.form.start")}<input type="datetime-local" value={appointmentForm.startsAt} onChange={(event) => setAppointmentForm((current) => ({ ...current, startsAt: event.target.value }))} /></label>
+              <label>{t("auth.form.end")}<input type="datetime-local" value={appointmentForm.endsAt} onChange={(event) => setAppointmentForm((current) => ({ ...current, endsAt: event.target.value }))} /></label>
             </div>
-            <label className="full-width-field">Qeyd<textarea value={appointmentForm.notes} onChange={(event) => setAppointmentForm((current) => ({ ...current, notes: event.target.value }))} /></label>
-            <button type="button" onClick={() => void createAppointment("call-center")}>Randevu yarat</button>
+            <label className="full-width-field">{t("auth.form.notes")}<textarea value={appointmentForm.notes} onChange={(event) => setAppointmentForm((current) => ({ ...current, notes: event.target.value }))} /></label>
+            <button type="button" onClick={() => void createAppointment("call-center")}>{t("auth.buttons.addAppointment")}</button>
           </article>
         </section>
         ) : null}
@@ -1311,7 +1627,7 @@ export function RolePortal() {
         {section === "doctors" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Bugünkü axın</span><h2>Yaxın randevular</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("admin.todayFlow")}</span><h2>{t("admin.upcomingAppointments")}</h2></div></div>
             <div className="appointment-list">
               {appointments.map((appointment) => (
                 <div key={appointment.id} className="appointment-row"><div><strong>{appointment.doctorName}</strong><p>{appointment.branch} • {formatDate(appointment.startsAt)}</p></div><div className="appointment-meta"><span>{statusLabel(appointment.status)}</span><span>{channelLabel(appointment.channel)}</span></div></div>
@@ -1324,13 +1640,13 @@ export function RolePortal() {
         {section === "settings" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Hesab tənzimləmələri</span><h2>Şifrə dəyişdirmə</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("admin.accountSettings")}</span><h2>{t("admin.changePassword")}</h2></div></div>
             <div className="form-grid single">
-              <label>Cari şifrə<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
-              <label>Yeni şifrə<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
-              <label>Şifrə təsdiqi<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+              <label>{t("auth.form.currentPassword")}<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
+              <label>{t("auth.form.newPassword")}<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
+              <label>{t("auth.form.confirmPassword")}<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
             </div>
-            <button type="button" onClick={() => void changePassword()}>Şifrəni dəyişdir</button>
+            <button type="button" onClick={() => void changePassword()}>{t("auth.buttons.updatePassword")}</button>
           </article>
         </section>
         ) : null}
@@ -1356,7 +1672,7 @@ export function RolePortal() {
             <span className="eyebrow">{t("landing.cards.doctor.title")}</span>
             <h1>{doctorDashboard?.doctor.fullName}</h1>
             <p>
-              {doctorDashboard?.doctor.branch}{doctorDashboard?.doctor.roomNumber ? ` • Otaq ${doctorDashboard.doctor.roomNumber}` : ""}
+              {doctorDashboard?.doctor.branch}{doctorDashboard?.doctor.roomNumber ? ` • ${t("admin.doctorRoom")} ${doctorDashboard.doctor.roomNumber}` : ""}
             </p>
           </div>
           <div className="topbar-actions"><button type="button" onClick={() => void loadDoctorData()}>{t("auth.buttons.refresh", "Yenilə")}</button></div>
@@ -1365,7 +1681,7 @@ export function RolePortal() {
         {section === "appointments" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Günün cədvəli</span><h2>Randevularım</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("doctor.todaySchedule")}</span><h2>{t("doctor.myAppointments")}</h2></div></div>
             <div className="appointment-list">
               {doctorDashboard?.appointments.map((appointment) => (
                 <button key={appointment.id} type="button" className="row-button" onClick={() => setSelectedDoctorPatientId(appointment.patientId ?? "") }>
@@ -1376,30 +1692,30 @@ export function RolePortal() {
           </article>
 
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Pasiyent profili</span><h2>{doctorPatientDetails?.fullName ?? "Pasiyent seçin"}</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("doctor.patientProfile")}</span><h2>{doctorPatientDetails?.fullName ?? t("doctor.selectPatientPlaceholder")}</h2></div></div>
             {doctorPatientDetails ? (
               <div className="detail-stack">
                 <div className="info-grid">
-                  <div><span>Kimlik</span><strong>{doctorPatientDetails.identityNumber}</strong></div>
-                  <div><span>Telefon</span><strong>{doctorPatientDetails.phone}</strong></div>
-                  <div><span>Qan qrupu</span><strong>{doctorPatientDetails.bloodType || "-"}</strong></div>
-                  <div><span>Allergiya</span><strong>{doctorPatientDetails.allergies || "-"}</strong></div>
+                  <div><span>{t("doctor.selectPatientPlaceholder")}</span><strong>{doctorPatientDetails.identityNumber}</strong></div>
+                  <div><span>{t("auth.buttons.refresh")}</span><strong>{doctorPatientDetails.phone}</strong></div>
+                  <div><span>{t("doctor.bloodType")}</span><strong>{doctorPatientDetails.bloodType || "-"}</strong></div>
+                  <div><span>{t("doctor.allergies")}</span><strong>{doctorPatientDetails.allergies || "-"}</strong></div>
                 </div>
                 <div className="stack-list">
-                  <h3>Keçmiş randevular</h3>
+                  <h3>{t("doctor.pastAppointments")}</h3>
                   {doctorPatientDetails.appointments.map((appointment) => (
                     <div key={appointment.id} className="report-item"><strong>{appointment.doctorName}</strong><p>{formatDate(appointment.startsAt)} • {statusLabel(appointment.status)}</p></div>
                   ))}
                 </div>
                 <div className="stack-list">
-                  <h3>Rapor və təyinatlar</h3>
+                  <h3>{t("doctor.reportsAndPrescriptions")}</h3>
                   {doctorPatientDetails.medicalRecords.map((record) => (
                     <div key={record.id} className="report-item"><strong>{record.diagnosis}</strong><p>{record.prescribedBy} • {record.treatmentPlan}</p></div>
                   ))}
                 </div>
               </div>
             ) : (
-              <p className="empty-state">Detalları görmək üçün sol tərəfdən bir pasiyent seçin.</p>
+              <p className="empty-state">{t("doctor.selectPatient")}</p>
             )}
           </article>
         </section>
@@ -1408,17 +1724,81 @@ export function RolePortal() {
         {section === "records" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Tibbi qeyd</span><h2>Yeni rapor və təyinat</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("doctor.medicalRecord")}</span><h2>{t("doctor.newReport")}</h2></div></div>
             <div className="form-grid single">
-              <label>Pasiyent<select value={medicalRecordForm.patientId} onChange={(event) => setMedicalRecordForm((current) => ({ ...current, patientId: event.target.value }))}><option value="">Seçin</option>{doctorDashboard?.patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.fullName} ({patient.identityNumber})</option>)}</select></label>
-              <label>Diaqnoz<input value={medicalRecordForm.diagnosis} onChange={(event) => setMedicalRecordForm((current) => ({ ...current, diagnosis: event.target.value }))} /></label>
+              <label>{t("doctor.patient")}<select value={medicalRecordForm.patientId} onChange={(event) => setMedicalRecordForm((current) => ({ ...current, patientId: event.target.value }))}><option value="">{t("ui.selectOption")}</option>{doctorDashboard?.patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.fullName} ({patient.identityNumber})</option>)}</select></label>
+              <label>{t("doctor.reportType")}<select value={medicalRecordForm.reportType} onChange={(event) => setMedicalRecordForm((current) => ({ ...current, reportType: event.target.value as ReportType }))}><option value="general">{t("doctor.generalReport")}</option><option value="blood-test">{t("doctor.bloodTest")}</option><option value="x-ray">{t("doctor.xRay")}</option><option value="ultrasound">{t("doctor.ultrasound")}</option><option value="ecg">{t("doctor.ecg")}</option><option value="biopsy">{t("doctor.biopsy")}</option><option value="consultation">{t("doctor.consultation")}</option></select></label>
+              <label>{t("doctor.diagnosis")}<input value={medicalRecordForm.diagnosis} onChange={(event) => setMedicalRecordForm((current) => ({ ...current, diagnosis: event.target.value }))} /></label>
             </div>
-            <label className="full-width-field">Təyinat və müalicə planı<textarea value={medicalRecordForm.treatmentPlan} onChange={(event) => setMedicalRecordForm((current) => ({ ...current, treatmentPlan: event.target.value }))} /></label>
-            <button type="button" onClick={() => void createMedicalRecord()}>Qeydi saxla</button>
+            <label className="full-width-field">{t("doctor.treatmentPlan")}<textarea value={medicalRecordForm.treatmentPlan} onChange={(event) => setMedicalRecordForm((current) => ({ ...current, treatmentPlan: event.target.value }))} /></label>
+
+            {medicalRecordForm.reportType === "blood-test" && (
+              <div className="test-results-section">
+                <h4>{t("doctor.testResults")}</h4>
+                <div className="test-results-table">
+                  <div className="table-header">
+                    <span>{t("doctor.testName")}</span>
+                    <span>{t("doctor.value")}</span>
+                    <span>{t("doctor.unit")}</span>
+                    <span>{t("doctor.referenceRange")}</span>
+                    <span>{t("doctor.status")}</span>
+                    <span></span>
+                  </div>
+                  {medicalRecordForm.testResults.map((test, index) => (
+                    <div key={index} className="table-row">
+                      <input
+                        type="text"
+                        placeholder={t("doctor.testName")}
+                        value={test.testName}
+                        onChange={(e) => updateTestResult(index, "testName", e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder={t("doctor.value")}
+                        value={test.value}
+                        onChange={(e) => updateTestResult(index, "value", e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder={t("doctor.unit")}
+                        value={test.unit}
+                        onChange={(e) => updateTestResult(index, "unit", e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder={t("doctor.referenceRange")}
+                        value={test.referenceRange}
+                        onChange={(e) => updateTestResult(index, "referenceRange", e.target.value)}
+                      />
+                      <select
+                        value={test.status}
+                        onChange={(e) => updateTestResult(index, "status", e.target.value as TestStatus)}
+                      >
+                        <option value="normal">{t("doctor.normal")}</option>
+                        <option value="high">{t("doctor.high")}</option>
+                        <option value="low">{t("doctor.low")}</option>
+                        <option value="critical">{t("doctor.critical")}</option>
+                      </select>
+                      <button type="button" onClick={() => removeTestResult(index)}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={addTestResult}>{t("doctor.addTestResult")}</button>
+              </div>
+            )}
+
+            <div className="form-actions">
+              <button type="button" onClick={() => void createMedicalRecord()}>{t("doctor.saveRecord")}</button>
+              <button type="button" onClick={() => void downloadReport()}>{t("doctor.downloadReport")}</button>
+              <div className="share-buttons">
+                <button type="button" onClick={() => void shareReport("email")}>{t("doctor.shareViaEmail")}</button>
+                <button type="button" onClick={() => void shareReport("whatsapp")}>{t("doctor.shareViaWhatsApp")}</button>
+              </div>
+            </div>
           </article>
 
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Seçilmiş pasiyent</span><h2>Tibbi tarixçə</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("doctor.selectedPatient")}</span><h2>{t("doctor.medicalHistory")}</h2></div></div>
             <div className="stack-list">
               {doctorPatientDetails?.medicalRecords.map((record) => (
                 <div key={record.id} className="report-item"><strong>{record.diagnosis}</strong><p>{record.prescribedBy} • {record.treatmentPlan}</p></div>
@@ -1431,11 +1811,11 @@ export function RolePortal() {
         {section === "patients" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Pasiyent siyahısı</span><h2>Mənə təhkim olunmuş pasiyentlər</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("doctor.patientList")}</span><h2>{t("doctor.assignedPatients")}</h2></div></div>
             <div className="stack-list">
               {doctorDashboard?.patients.map((patient) => (
                 <button key={patient.id} type="button" className="row-button" onClick={() => setSelectedDoctorPatientId(patient.id)}>
-                  <div className="report-item selectable-item"><strong>{patient.fullName}</strong><p>{patient.latestRecord?.diagnosis ?? "Hələ tibbi qeyd yoxdur"}</p></div>
+                  <div className="report-item selectable-item"><strong>{patient.fullName}</strong><p>{patient.latestRecord?.diagnosis ?? t("doctor.noRecord")}</p></div>
                 </button>
               ))}
             </div>
@@ -1446,13 +1826,36 @@ export function RolePortal() {
         {section === "settings" ? (
         <section className="content-grid lower-grid">
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Hesab tənzimləmələri</span><h2>Şifrə dəyişdirmə</h2></div></div>
-            <div className="form-grid single">
-              <label>Cari şifrə<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
-              <label>Yeni şifrə<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
-              <label>Şifrə təsdiqi<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+            <div className="panel-head"><div><span className="eyebrow">PDF Şablonu</span><h2>Hesabat Şablonu Ayarları</h2></div></div>
+            <div className="form-grid">
+              <label>Xəstəxana Adı<input value={pdfTemplateForm.hospitalName} onChange={(event) => setPdfTemplateForm((current) => ({ ...current, hospitalName: event.target.value }))} /></label>
+              <label>Ünvan<input value={pdfTemplateForm.hospitalAddress} onChange={(event) => setPdfTemplateForm((current) => ({ ...current, hospitalAddress: event.target.value }))} /></label>
+              <label>Telefon<input value={pdfTemplateForm.hospitalPhone} onChange={(event) => setPdfTemplateForm((current) => ({ ...current, hospitalPhone: event.target.value }))} /></label>
+              <label>{t("doctor.hospitalLogo")}<input value={pdfTemplateForm.hospitalLogo} onChange={(event) => setPdfTemplateForm((current) => ({ ...current, hospitalLogo: event.target.value }))} placeholder="https://example.com/logo.png" /></label>
+              <label>Həkim Ünvanı<input value={pdfTemplateForm.doctorTitle} onChange={(event) => setPdfTemplateForm((current) => ({ ...current, doctorTitle: event.target.value }))} /></label>
+              <label>Həkim İmza<input value={pdfTemplateForm.doctorSignature} onChange={(event) => setPdfTemplateForm((current) => ({ ...current, doctorSignature: event.target.value }))} /></label>
+              <label>Dil<select value={pdfTemplateForm.language} onChange={(event) => setPdfTemplateForm((current) => ({ ...current, language: event.target.value as "az" | "en" | "ru" | "tr" }))}>
+                <option value="az">Azərbaycan</option>
+                <option value="en">English</option>
+                <option value="ru">Русский</option>
+                <option value="tr">Türkçe</option>
+              </select></label>
             </div>
-            <button type="button" onClick={() => void changePassword()}>Şifrəni dəyişdir</button>
+            <label className="full-width-field">Alt Mətn (Footer)<textarea value={pdfTemplateForm.footerText} onChange={(event) => setPdfTemplateForm((current) => ({ ...current, footerText: event.target.value }))} /></label>
+            <div className="form-actions">
+              <button type="button" onClick={loadPDFTemplateSettings}>Cari Ayarları Yüklə</button>
+              <button type="button" onClick={savePDFTemplateSettings}>Ayarları Yadda Saxla</button>
+            </div>
+          </article>
+
+          <article className="panel-card">
+            <div className="panel-head"><div><span className="eyebrow">{t("doctor.accountSettings")}</span><h2>{t("doctor.changePassword")}</h2></div></div>
+            <div className="form-grid single">
+              <label>{t("doctor.currentPassword")}<input type="password" value={changePasswordForm.currentPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
+              <label>{t("doctor.newPassword")}<input type="password" value={changePasswordForm.newPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, newPassword: event.target.value }))} /></label>
+              <label>{t("doctor.confirmPassword")}<input type="password" value={changePasswordForm.confirmPassword} onChange={(event) => setChangePasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+            </div>
+            <button type="button" onClick={() => void changePassword()}>{t("doctor.changePasswordButton")}</button>
           </article>
         </section>
         ) : null}
@@ -1486,25 +1889,25 @@ export function RolePortal() {
         <section className="content-grid lower-grid">
           {section === "booking" ? (
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Yeni randevu</span><h2>Həkim seç və vaxt al</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("patient.newAppointment")}</span><h2>{t("patient.selectDoctor")}</h2></div></div>
             <div className="form-grid">
-              <label>Həkim<select value={patientBookingForm.doctorId} onChange={(event) => setPatientBookingForm((current) => ({ ...current, doctorId: event.target.value }))}><option value="">Seçin</option>{doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.fullName} ({doctor.branch})</option>)}</select></label>
-              <label>Başlama<input type="datetime-local" value={patientBookingForm.startsAt} onChange={(event) => setPatientBookingForm((current) => ({ ...current, startsAt: event.target.value }))} /></label>
-              <label>Bitmə<input type="datetime-local" value={patientBookingForm.endsAt} onChange={(event) => setPatientBookingForm((current) => ({ ...current, endsAt: event.target.value }))} /></label>
+              <label>{t("patient.doctor")}<select value={patientBookingForm.doctorId} onChange={(event) => setPatientBookingForm((current) => ({ ...current, doctorId: event.target.value }))}><option value="">{t("ui.selectOption")}</option>{doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.fullName} ({doctor.branch})</option>)}</select></label>
+              <label>{t("patient.start")}<input type="datetime-local" value={patientBookingForm.startsAt} onChange={(event) => setPatientBookingForm((current) => ({ ...current, startsAt: event.target.value }))} /></label>
+              <label>{t("patient.end")}<input type="datetime-local" value={patientBookingForm.endsAt} onChange={(event) => setPatientBookingForm((current) => ({ ...current, endsAt: event.target.value }))} /></label>
             </div>
-            <label className="full-width-field">Qeyd<textarea value={patientBookingForm.notes} onChange={(event) => setPatientBookingForm((current) => ({ ...current, notes: event.target.value }))} /></label>
-            <button type="button" onClick={() => void createPatientAppointment()}>Randevu al</button>
+            <label className="full-width-field">{t("patient.note")}<textarea value={patientBookingForm.notes} onChange={(event) => setPatientBookingForm((current) => ({ ...current, notes: event.target.value }))} /></label>
+            <button type="button" onClick={() => void createPatientAppointment()}>{t("patient.bookAppointment")}</button>
           </article>
           ) : null}
 
           {section === "profile" ? (
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Profil</span><h2>Tibbi məlumatlarım</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("patient.profile")}</span><h2>{t("patient.myMedicalInfo")}</h2></div></div>
             <div className="info-grid">
-              <div><span>Qan qrupu</span><strong>{patientPortal?.bloodType || "-"}</strong></div>
-              <div><span>Allergiyalar</span><strong>{patientPortal?.allergies || "-"}</strong></div>
-              <div><span>Xroniki xəstəliklər</span><strong>{patientPortal?.chronicConditions || "-"}</strong></div>
-              <div><span>Cins</span><strong>{patientPortal?.gender || "-"}</strong></div>
+              <div><span>{t("doctor.bloodType")}</span><strong>{patientPortal?.bloodType || "-"}</strong></div>
+              <div><span>{t("doctor.allergies")}</span><strong>{patientPortal?.allergies || "-"}</strong></div>
+              <div><span>{t("doctor.chronicConditions")}</span><strong>{patientPortal?.chronicConditions || "-"}</strong></div>
+              <div><span>{t("patient.gender")}</span><strong>{patientPortal?.gender || "-"}</strong></div>
             </div>
           </article>
           ) : null}
@@ -1515,7 +1918,7 @@ export function RolePortal() {
         <section className="content-grid lower-grid">
           {section === "history" ? (
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Yaxın randevular</span><h2>Yeni və aktiv görüşlərim</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("patient.upcomingAppointments")}</span><h2>{t("patient.newAndActiveVisits")}</h2></div></div>
             <div className="appointment-list">
               {patientPortal?.upcomingAppointments.map((appointment) => (
                 <div key={appointment.id} className="appointment-row"><div><strong>{appointment.doctorName}</strong><p>{appointment.branch} • {formatDate(appointment.startsAt)}</p></div><div className="appointment-meta"><span>{channelLabel(appointment.channel)}</span><span data-status={appointment.status}>{statusLabel(appointment.status)}</span></div></div>
@@ -1526,7 +1929,7 @@ export function RolePortal() {
 
           {section === "reports" ? (
           <article className="panel-card">
-            <div className="panel-head"><div><span className="eyebrow">Keçmiş və raporlar</span><h2>Əvvəlki görüşlər və reseptlər</h2></div></div>
+            <div className="panel-head"><div><span className="eyebrow">{t("patient.pastAndReports")}</span><h2>{t("patient.previousVisitsAndReceipts")}</h2></div></div>
             <div className="stack-list">
               {patientPortal?.pastAppointments.map((appointment) => (
                 <div key={appointment.id} className="report-item"><strong>{appointment.doctorName}</strong><p>{formatDate(appointment.startsAt)} • {statusLabel(appointment.status)}</p></div>

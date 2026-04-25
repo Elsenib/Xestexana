@@ -463,3 +463,110 @@ select {
   .portal-hero { padding: 24px 20px 28px; }
   button { padding: 11px 16px; }
 }
+
+/* TEST RESULTS TABLE */
+.test-results-section {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+}
+
+.test-results-section h4 {
+  margin: 0 0 1rem 0;
+  color: var(--ink);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.test-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1fr 0.5fr;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--accent-soft);
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  color: var(--accent-2);
+  font-size: 0.875rem;
+}
+
+.table-header span {
+  text-align: center;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1fr 0.5fr;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+
+.table-row input,
+.table-row select {
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 0.875rem;
+  background: var(--surface-2);
+}
+
+.table-row input:focus,
+.table-row select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.table-row button {
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: var(--t);
+}
+
+.table-row button:hover {
+  background: var(--warning);
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.share-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.share-buttons button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: var(--t);
+}
+
+.share-buttons button:hover {
+  background: var(--accent-2);
+}
