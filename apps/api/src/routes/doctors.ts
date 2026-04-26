@@ -182,13 +182,15 @@ export async function doctorRoutes(app: FastifyInstance) {
           data: {
             email: body.email,
             passwordHash,
-            role: "DOCTOR"
+            role: "DOCTOR",
+            clinicId: request.user.clinicId
           }
         });
 
         return tx.doctorProfile.create({
           data: {
             userId: user.id,
+            clinicId: request.user.clinicId,
             title: body.title,
             firstName: body.firstName,
             lastName: body.lastName,
