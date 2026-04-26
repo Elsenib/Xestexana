@@ -37,6 +37,7 @@ export async function medicalRecordRoutes(app: FastifyInstance) {
       const record = await app.prisma.medicalRecord.create({
         data: {
           patientId: body.patientId,
+          clinicId: request.user.clinicId,
           diagnosis: body.diagnosis,
           treatmentPlan: body.treatmentPlan,
           prescribedBy

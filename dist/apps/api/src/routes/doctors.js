@@ -58,6 +58,7 @@ export async function doctorRoutes(app) {
                 message: "HÉ™kim profili tapÄ±lmadÄ±."
             });
         }
+        console.log(`Doctor ${doctor.user.email} has ${doctor.appointments.length} appointments`);
         const patientMap = new Map();
         for (const appointment of doctor.appointments) {
             const latestRecord = appointment.patient.medicalRecords[0];
@@ -142,12 +143,14 @@ export async function doctorRoutes(app) {
                 data: {
                     email: body.email,
                     passwordHash,
-                    role: "DOCTOR"
+                    role: "DOCTOR",
+                    clinicId: request.user.clinicId
                 }
             });
             return tx.doctorProfile.create({
                 data: {
                     userId: user.id,
+                    clinicId: request.user.clinicId,
                     title: body.title,
                     firstName: body.firstName,
                     lastName: body.lastName,
@@ -168,5 +171,23 @@ export async function doctorRoutes(app) {
             return reply.code(404).send({ message: "Hekim tapilmadi." });
         await app.prisma.doctorProfile.update({ where: { id }, data: { active: false } });
         return { message: "Hekim deaktiv edildi." };
+    });
+    app.delete("/doctors/:id", { preHandler: [app.authenticate, app.authorize(["ADMIN"])] }, async (request, reply) => {
+        const { id } = request.params;
+        // Check if doctor has active appointments
+        const activeAppointments = await app.prisma.appointment.count({
+            where: {
+                doctorId: id,
+                status: { in: ["PENDING", "CONFIRMED"] }
+            }
+        });
+        if (activeAppointments > 0) {
+            return reply.code(400).send({
+                message: "Bu hekimi silmek mümkün deyil, çünki aktiv randevuları var."
+            });
+        }
+        // Delete doctor profile (user will be deleted via cascade)
+        await app.prisma.doctorProfile.delete({ where: { id } });
+        return { message: "Hekim uğurla silindi." };
     });
 }

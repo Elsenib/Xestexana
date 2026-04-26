@@ -24,7 +24,7 @@ export async function adminUserRoutes(app) {
         const body = createAdminSchema.parse(request.body);
         const passwordHash = await bcrypt.hash(body.password, 10);
         const user = await app.prisma.user.create({
-            data: { email: body.email, passwordHash, role: body.role },
+            data: { email: body.email, passwordHash, role: body.role, clinicId: request.user.clinicId },
             select: { id: true, email: true, role: true, active: true, createdAt: true }
         });
         return reply.code(201).send(user);

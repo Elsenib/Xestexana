@@ -17,6 +17,7 @@ import { medicalRecordRoutes } from "./routes/medical-records.js";
 import { nurseRoutes } from "./routes/nurses.js";
 import { observabilityRoutes } from "./routes/observability.js";
 import { patientRoutes } from "./routes/patients.js";
+import { subscriptionRoutes } from "./routes/subscription.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -99,6 +100,7 @@ export function buildApp() {
 
   app.register(healthRoutes, { prefix: "/api" });
   app.register(authRoutes, { prefix: "/api" });
+  app.register(subscriptionRoutes, { prefix: "/api" });
   app.register(adminUserRoutes, { prefix: "/api" });
   app.register(patientRoutes, { prefix: "/api" });
   app.register(doctorRoutes, { prefix: "/api" });

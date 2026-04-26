@@ -142,6 +142,7 @@ export async function appointmentRoutes(app: FastifyInstance) {
       data: {
         patientId,
         doctorId: body.doctorId,
+        clinicId: request.user.clinicId,
         startsAt,
         endsAt,
         channel: body.channel,

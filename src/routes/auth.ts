@@ -6,7 +6,15 @@ import type { UserRole } from "@hospital/shared";
 
 import { env } from "../env.js";
 
-const registerPatientSchema = z.object({
+const createClinicSchema = z.object({
+  name: z.string().min(1),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  logo: z.string().optional()
+});
+
+const registerPatientWithClinicSchema = z.object({
+  clinicId: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
   identityNumber: z.string().min(5),
@@ -43,8 +51,24 @@ const loginSchema = z.object({
 });
 
 export async function authRoutes(app: FastifyInstance) {
+  // Clinic oluşturma (sadece admin için)
+  app.post("/auth/create-clinic", async (request, reply) => {
+    const body = createClinicSchema.parse(request.body);
+
+    const clinic = await app.prisma.clinic.create({
+      data: {
+        name: body.name,
+        address: body.address,
+        phone: body.phone,
+        logo: body.logo
+      }
+    });
+
+    return reply.code(201).send(clinic);
+  });
+
   app.post("/auth/register-patient", async (request, reply) => {
-    const body = registerPatientSchema.parse(request.body);
+    const body = registerPatientWithClinicSchema.parse(request.body);
     const passwordHash = await bcrypt.hash(body.password, 10);
 
     const patient = await app.prisma.$transaction(async (tx) => {
@@ -52,13 +76,15 @@ export async function authRoutes(app: FastifyInstance) {
         data: {
           email: body.email,
           passwordHash,
-          role: "PATIENT"
+          role: "PATIENT",
+          clinicId: body.clinicId
         }
       });
 
       return tx.patientProfile.create({
         data: {
           userId: user.id,
+          clinicId: body.clinicId,
           identityNumber: body.identityNumber,
           firstName: body.firstName,
           lastName: body.lastName,
@@ -85,7 +111,8 @@ export async function authRoutes(app: FastifyInstance) {
       {
         sub: patient.user.id,
         role: patient.user.role as UserRole,
-        email: patient.user.email
+        email: patient.user.email,
+        clinicId: body.clinicId
       },
       {
         expiresIn: "12h"
@@ -122,11 +149,22 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const passwordHash = await bcrypt.hash(body.password, 10);
+
+    // Default clinic oluştur
+    const defaultClinic = await app.prisma.clinic.create({
+      data: {
+        name: "Default Clinic",
+        address: "Default Address",
+        phone: "000-000-0000"
+      }
+    });
+
     const admin = await app.prisma.user.create({
       data: {
         email: body.email,
         passwordHash,
-        role: "ADMIN"
+        role: "ADMIN",
+        clinicId: defaultClinic.id
       }
     });
 
@@ -147,7 +185,14 @@ export async function authRoutes(app: FastifyInstance) {
         email: true,
         role: true,
         passwordHash: true,
-        active: true
+        active: true,
+        clinicId: true,
+        clinic: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
       }
     });
 
@@ -174,7 +219,8 @@ export async function authRoutes(app: FastifyInstance) {
       {
         sub: user.id,
         role: user.role as UserRole,
-        email: user.email
+        email: user.email,
+        clinicId: user.clinicId
       },
       {
         expiresIn: "12h"
@@ -186,7 +232,8 @@ export async function authRoutes(app: FastifyInstance) {
       user: {
         id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        clinic: user.clinic
       }
     };
   });

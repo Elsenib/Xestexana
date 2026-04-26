@@ -60,6 +60,7 @@ export async function nurseRoutes(app: FastifyInstance) {
           email: body.email,
           passwordHash,
           role: "NURSE",
+          clinicId: request.user.clinicId,
           active: body.active
         },
         select: {

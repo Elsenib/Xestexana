@@ -102,6 +102,7 @@ export async function appointmentRoutes(app) {
             data: {
                 patientId,
                 doctorId: body.doctorId,
+                clinicId: request.user.clinicId,
                 startsAt,
                 endsAt,
                 channel: body.channel,

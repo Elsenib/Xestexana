@@ -6,6 +6,7 @@ export interface JwtUserPayload {
   sub?: string;
   role: UserRole;
   email: string;
+  clinicId: string;
 }
 
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {

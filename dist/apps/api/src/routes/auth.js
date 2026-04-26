@@ -1,7 +1,14 @@
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { env } from "../env.js";
-const registerPatientSchema = z.object({
+const createClinicSchema = z.object({
+    name: z.string().min(1),
+    address: z.string().optional(),
+    phone: z.string().optional(),
+    logo: z.string().optional()
+});
+const registerPatientWithClinicSchema = z.object({
+    clinicId: z.string().min(1),
     email: z.string().email(),
     password: z.string().min(8),
     identityNumber: z.string().min(5),
@@ -24,25 +31,44 @@ const resetAdminPasswordSchema = z.object({
     email: z.string().email(),
     newPassword: z.string().min(8)
 });
+const changePasswordSchema = z.object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(8)
+});
 const loginSchema = z.object({
     email: z.string().email(),
     password: z.string().min(8)
 });
 export async function authRoutes(app) {
+    // Clinic oluşturma (sadece admin için)
+    app.post("/auth/create-clinic", async (request, reply) => {
+        const body = createClinicSchema.parse(request.body);
+        const clinic = await app.prisma.clinic.create({
+            data: {
+                name: body.name,
+                address: body.address,
+                phone: body.phone,
+                logo: body.logo
+            }
+        });
+        return reply.code(201).send(clinic);
+    });
     app.post("/auth/register-patient", async (request, reply) => {
-        const body = registerPatientSchema.parse(request.body);
+        const body = registerPatientWithClinicSchema.parse(request.body);
         const passwordHash = await bcrypt.hash(body.password, 10);
         const patient = await app.prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
                     email: body.email,
                     passwordHash,
-                    role: "PATIENT"
+                    role: "PATIENT",
+                    clinicId: body.clinicId
                 }
             });
             return tx.patientProfile.create({
                 data: {
                     userId: user.id,
+                    clinicId: body.clinicId,
                     identityNumber: body.identityNumber,
                     firstName: body.firstName,
                     lastName: body.lastName,
@@ -67,7 +93,8 @@ export async function authRoutes(app) {
         const token = await reply.jwtSign({
             sub: patient.user.id,
             role: patient.user.role,
-            email: patient.user.email
+            email: patient.user.email,
+            clinicId: body.clinicId
         }, {
             expiresIn: "12h"
         });
@@ -96,11 +123,20 @@ export async function authRoutes(app) {
             });
         }
         const passwordHash = await bcrypt.hash(body.password, 10);
+        // Default clinic oluştur
+        const defaultClinic = await app.prisma.clinic.create({
+            data: {
+                name: "Default Clinic",
+                address: "Default Address",
+                phone: "000-000-0000"
+            }
+        });
         const admin = await app.prisma.user.create({
             data: {
                 email: body.email,
                 passwordHash,
-                role: "ADMIN"
+                role: "ADMIN",
+                clinicId: defaultClinic.id
             }
         });
         return reply.code(201).send({
@@ -112,7 +148,21 @@ export async function authRoutes(app) {
     app.post("/auth/login", async (request, reply) => {
         const body = loginSchema.parse(request.body);
         const user = await app.prisma.user.findUnique({
-            where: { email: body.email }
+            where: { email: body.email },
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                passwordHash: true,
+                active: true,
+                clinicId: true,
+                clinic: {
+                    select: {
+                        id: true,
+                        name: true
+                    }
+                }
+            }
         });
         if (!user) {
             return reply.code(401).send({
@@ -133,7 +183,8 @@ export async function authRoutes(app) {
         const token = await reply.jwtSign({
             sub: user.id,
             role: user.role,
-            email: user.email
+            email: user.email,
+            clinicId: user.clinicId
         }, {
             expiresIn: "12h"
         });
@@ -142,7 +193,8 @@ export async function authRoutes(app) {
             user: {
                 id: user.id,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                clinic: user.clinic
             }
         };
     });
@@ -163,6 +215,32 @@ export async function authRoutes(app) {
             data: { passwordHash }
         });
         return { message: "Admin sifresi ugurla sifirlandi." };
+    });
+    app.post("/auth/change-password", {
+        preHandler: [app.authenticate]
+    }, async (request, reply) => {
+        const body = changePasswordSchema.parse(request.body);
+        const userId = request.user.sub;
+        if (!userId) {
+            return reply.code(401).send({ message: "Giriş tələb olunur." });
+        }
+        const user = await app.prisma.user.findUnique({
+            where: { id: userId },
+            select: { passwordHash: true }
+        });
+        if (!user) {
+            return reply.code(404).send({ message: "İstifadəçi tapılmadı." });
+        }
+        const isValid = await bcrypt.compare(body.currentPassword, user.passwordHash);
+        if (!isValid) {
+            return reply.code(400).send({ message: "Cari şifrə yanlışdır." });
+        }
+        const newPasswordHash = await bcrypt.hash(body.newPassword, 10);
+        await app.prisma.user.update({
+            where: { id: userId },
+            data: { passwordHash: newPasswordHash }
+        });
+        return { message: "Şifrə uğurla dəyişdirildi." };
     });
     app.get("/auth/me", {
         preHandler: [app.authenticate]
