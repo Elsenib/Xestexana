@@ -5,9 +5,7 @@
   "main": "main.js",
   "private": true,
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --win --x64",
-    "build:dir": "electron-builder --win --x64 --dir"
+    "start": "electron ."
   },
   "build": {
     "appId": "com.dasdanstudio.hospitalplatform",
@@ -40,7 +38,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -52,7 +52,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^34.0.0",
+    "electron": "^34.5.8",
     "electron-builder": "^25.0.0"
   }
 }
