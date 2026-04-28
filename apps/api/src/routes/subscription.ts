@@ -66,7 +66,7 @@ export async function subscriptionRoutes(app: FastifyInstance) {
     });
 
     // Admin kullanıcısı oluştur
-    const passwordHash = await app.prisma.$transaction(async (tx) => {
+    const passwordHash = await app.prisma.$transaction(async (tx: any) => {
       const hash = await require("bcryptjs").hash(body.adminPassword, 10);
 
       await tx.user.create({

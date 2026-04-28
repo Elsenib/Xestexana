@@ -10,26 +10,26 @@ const createDoctorSchema = z.object({
   lastName: z.string().min(1),
   branch: z.string().min(1),
   roomNumber: z.string().optional(),
-  active: z.boolean().default(true)
+  active: z.boolean().default(true),
 });
 
 const listQuerySchema = z.object({
   branch: z.string().optional(),
   active: z.coerce.boolean().optional(),
-  take: z.coerce.number().int().min(1).max(200).default(50)
+  take: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 export async function doctorRoutes(app: FastifyInstance) {
   app.get(
     "/doctors/me/dashboard",
     {
-      preHandler: [app.authenticate, app.authorize(["DOCTOR"])]
+      preHandler: [app.authenticate, app.authorize(["DOCTOR"])],
     },
     async (request, reply) => {
       const userId = request.user.sub;
       if (!userId) {
         return reply.code(401).send({
-          message: "GiriÅŸ tÉ™lÉ™b olunur."
+          message: "GiriÅŸ tÉ™lÉ™b olunur.",
         });
       }
 
@@ -38,8 +38,8 @@ export async function doctorRoutes(app: FastifyInstance) {
         include: {
           user: {
             select: {
-              email: true
-            }
+              email: true,
+            },
           },
           appointments: {
             include: {
@@ -47,43 +47,48 @@ export async function doctorRoutes(app: FastifyInstance) {
                 include: {
                   medicalRecords: {
                     orderBy: {
-                      createdAt: "desc"
+                      createdAt: "desc",
                     },
-                    take: 1
-                  }
-                }
-              }
+                    take: 1,
+                  },
+                },
+              },
             },
             orderBy: {
-              startsAt: "asc"
+              startsAt: "asc",
             },
-            take: 50
-          }
-        }
+            take: 50,
+          },
+        },
       });
 
       if (!doctor) {
         return reply.code(404).send({
-          message: "HÉ™kim profili tapÄ±lmadÄ±."
+          message: "HÉ™kim profili tapÄ±lmadÄ±.",
         });
       }
 
-      console.log(`Doctor ${doctor.user.email} has ${doctor.appointments.length} appointments`);
+      console.log(
+        `Doctor ${doctor.user.email} has ${doctor.appointments.length} appointments`,
+      );
 
-      const patientMap = new Map<string, {
-        id: string;
-        fullName: string;
-        identityNumber: string;
-        phone: string;
-        gender: string;
-        birthDate: string;
-        latestRecord: {
-          diagnosis: string;
-          treatmentPlan: string;
-          prescribedBy: string;
-          createdAt: string;
-        } | null;
-      }>();
+      const patientMap = new Map<
+        string,
+        {
+          id: string;
+          fullName: string;
+          identityNumber: string;
+          phone: string;
+          gender: string;
+          birthDate: string;
+          latestRecord: {
+            diagnosis: string;
+            treatmentPlan: string;
+            prescribedBy: string;
+            createdAt: string;
+          } | null;
+        }
+      >();
 
       for (const appointment of doctor.appointments) {
         const latestRecord = appointment.patient.medicalRecords[0];
@@ -100,9 +105,9 @@ export async function doctorRoutes(app: FastifyInstance) {
                   diagnosis: latestRecord.diagnosis,
                   treatmentPlan: latestRecord.treatmentPlan,
                   prescribedBy: latestRecord.prescribedBy,
-                  createdAt: latestRecord.createdAt.toISOString()
+                  createdAt: latestRecord.createdAt.toISOString(),
                 }
-              : null
+              : null,
           });
         }
       }
@@ -114,29 +119,39 @@ export async function doctorRoutes(app: FastifyInstance) {
           fullName: `${doctor.title} ${doctor.firstName} ${doctor.lastName}`,
           branch: doctor.branch,
           roomNumber: doctor.roomNumber,
-          active: doctor.active
+          active: doctor.active,
         },
-        appointments: doctor.appointments.map((appointment) => ({
-          id: appointment.id,
-          patientId: appointment.patient.id,
-          patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
-          identityNumber: appointment.patient.identityNumber,
-          phone: appointment.patient.phone,
-          startsAt: appointment.startsAt.toISOString(),
-          endsAt: appointment.endsAt.toISOString(),
-          status: appointment.status,
-          channel: appointment.channel,
-          notes: appointment.notes
-        })),
-        patients: Array.from(patientMap.values())
+        appointments: doctor.appointments.map(
+          (appointment: {
+            id: string;
+            patient: any;
+            startsAt: Date;
+            endsAt: Date;
+            status: string;
+            channel: string;
+            notes: string | null;
+          }) => ({
+            id: appointment.id,
+            patientId: appointment.patient.id,
+            patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+            identityNumber: appointment.patient.identityNumber,
+            phone: appointment.patient.phone,
+            startsAt: appointment.startsAt.toISOString(),
+            endsAt: appointment.endsAt.toISOString(),
+            status: appointment.status,
+            channel: appointment.channel,
+            notes: appointment.notes,
+          }),
+        ),
+        patients: Array.from(patientMap.values()),
       };
-    }
+    },
   );
 
   app.get(
     "/doctors",
     {
-      preHandler: [app.authenticate]
+      preHandler: [app.authenticate],
     },
     async (request) => {
       const query = listQuerySchema.parse(request.query);
@@ -144,47 +159,59 @@ export async function doctorRoutes(app: FastifyInstance) {
       const rows = await app.prisma.doctorProfile.findMany({
         where: {
           ...(query.branch ? { branch: query.branch } : {}),
-          ...(query.active === undefined ? {} : { active: query.active })
+          ...(query.active === undefined ? {} : { active: query.active }),
         },
         include: {
-          user: { select: { email: true } }
+          user: { select: { email: true } },
         },
         orderBy: [{ branch: "asc" }, { lastName: "asc" }],
-        take: query.take
+        take: query.take,
       });
 
-      return rows.map((row) => ({
-        id: row.id,
-        email: row.user.email,
-        fullName: `${row.title} ${row.firstName} ${row.lastName}`,
-        title: row.title,
-        firstName: row.firstName,
-        lastName: row.lastName,
-        branch: row.branch,
-        roomNumber: row.roomNumber,
-        active: row.active,
-        createdAt: row.createdAt
-      }));
-    }
+      return rows.map(
+        (row: {
+          id: string;
+          user: { email: string };
+          title: string;
+          firstName: string;
+          lastName: string;
+          branch: string;
+          roomNumber: string | null;
+          active: boolean;
+          createdAt: Date;
+        }) => ({
+          id: row.id,
+          email: row.user.email,
+          fullName: `${row.title} ${row.firstName} ${row.lastName}`,
+          title: row.title,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          branch: row.branch,
+          roomNumber: row.roomNumber ?? "", // null olarsa boş string olsun
+          active: row.active,
+          createdAt: row.createdAt,
+        }),
+      );
+    },
   );
 
   app.post(
     "/doctors",
     {
-      preHandler: [app.authenticate, app.authorize(["ADMIN"])]
+      preHandler: [app.authenticate, app.authorize(["ADMIN"])],
     },
     async (request, reply) => {
       const body = createDoctorSchema.parse(request.body);
       const passwordHash = await bcrypt.hash(body.password, 10);
 
-      const doctor = await app.prisma.$transaction(async (tx) => {
+      const doctor = await app.prisma.$transaction(async (tx: any) => {
         const user = await tx.user.create({
           data: {
             email: body.email,
             passwordHash,
             role: "DOCTOR",
-            clinicId: request.user.clinicId
-          }
+            clinicId: request.user.clinicId,
+          },
         });
 
         return tx.doctorProfile.create({
@@ -196,26 +223,31 @@ export async function doctorRoutes(app: FastifyInstance) {
             lastName: body.lastName,
             branch: body.branch,
             roomNumber: body.roomNumber,
-            active: body.active
-          }
+            active: body.active,
+          },
         });
       });
 
       return reply.code(201).send({
-        id: doctor.id
+        id: doctor.id,
       });
-    }
+    },
   );
   app.patch(
     "/doctors/:id/deactivate",
     { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const doctor = await app.prisma.doctorProfile.findUnique({ where: { id } });
+      const doctor = await app.prisma.doctorProfile.findUnique({
+        where: { id },
+      });
       if (!doctor) return reply.code(404).send({ message: "Hekim tapilmadi." });
-      await app.prisma.doctorProfile.update({ where: { id }, data: { active: false } });
+      await app.prisma.doctorProfile.update({
+        where: { id },
+        data: { active: false },
+      });
       return { message: "Hekim deaktiv edildi." };
-    }
+    },
   );
 
   app.delete(
@@ -228,13 +260,14 @@ export async function doctorRoutes(app: FastifyInstance) {
       const activeAppointments = await app.prisma.appointment.count({
         where: {
           doctorId: id,
-          status: { in: ["PENDING", "CONFIRMED"] }
-        }
+          status: { in: ["PENDING", "CONFIRMED"] },
+        },
       });
 
       if (activeAppointments > 0) {
         return reply.code(400).send({
-          message: "Bu hekimi silmek mümkün deyil, çünki aktiv randevuları var."
+          message:
+            "Bu hekimi silmek mümkün deyil, çünki aktiv randevuları var.",
         });
       }
 
@@ -242,6 +275,6 @@ export async function doctorRoutes(app: FastifyInstance) {
       await app.prisma.doctorProfile.delete({ where: { id } });
 
       return { message: "Hekim uğurla silindi." };
-    }
+    },
   );
 }

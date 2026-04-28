@@ -71,7 +71,7 @@ export async function authRoutes(app: FastifyInstance) {
     const body = registerPatientWithClinicSchema.parse(request.body);
     const passwordHash = await bcrypt.hash(body.password, 10);
 
-    const patient = await app.prisma.$transaction(async (tx) => {
+    const patient = await app.prisma.$transaction(async (tx: any) => {
       const user = await tx.user.create({
         data: {
           email: body.email,

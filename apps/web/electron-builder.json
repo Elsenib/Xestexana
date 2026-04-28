@@ -1,0 +1,16 @@
+{
+  "appId": "com.xestexana.desktop",
+  "productName": "Xestexana Platform",
+  "directories": {
+    "output": "dist_electron"
+  },
+  "files": [
+    "main.js",
+    ".next/**",
+    "public/**",
+    "package.json"
+  ],
+  "win": {
+    "target": "nsis"
+  }
+}

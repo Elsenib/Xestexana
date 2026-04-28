@@ -142,7 +142,7 @@ type PatientPortalData = {
   medicalRecords: MedicalRecordRow[];
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://xestexana.live/api";
 
 function toInputDateTime(offsetHours: number) {
   const date = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
@@ -302,7 +302,10 @@ export function RolePortal() {
       headers.set("Authorization", `Bearer ${token}`);
     }
 
-    const response = await fetch(`${API_BASE}${path}`, {
+    // Əgər path artıq /api ilə başlamırsa, avtomatik əlavə et
+    const fullPath = path.startsWith("/api/") ? path : `/api${path.startsWith("/") ? path : "/" + path}`;
+
+    const response = await fetch(`${API_BASE.replace(/\/api$/, "")}${fullPath}`, {
       ...init,
       headers
     });

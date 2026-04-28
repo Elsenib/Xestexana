@@ -24,16 +24,14 @@
   },
   "devDependencies": {
     "prisma": "^6.7.0",
-    "typescript": "^5.6.3"
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.5",
     "fbjs": "^3.0.5",
     "react-native-web": "^0.21.2"
   },
-  
   "compilerOptions": {
     "noImplicitAny": false
   }
-
 }

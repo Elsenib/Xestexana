@@ -8,3 +8,10 @@ coverage/
 .DS_Store
 *.log
 .vercel
+.next
+dist
+dist_electron
+*.exe
+*.zip
+*.tar
+*.tar.gz

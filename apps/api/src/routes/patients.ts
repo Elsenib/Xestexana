@@ -122,8 +122,8 @@ export async function patientRoutes(app: FastifyInstance) {
         bloodType: profile.bloodType,
         allergies: profile.allergies,
         chronicConditions: profile.chronicConditions,
-        upcomingAppointments: profile.appointments.filter((item) => item.startsAt >= now).map(mapAppointment),
-        pastAppointments: profile.appointments.filter((item) => item.startsAt < now).map(mapAppointment),
+        upcomingAppointments: profile.appointments.filter((item: { startsAt: Date }) => item.startsAt >= now).map(mapAppointment),
+        pastAppointments: profile.appointments.filter((item: { startsAt: Date }) => item.startsAt < now).map(mapAppointment),
         medicalRecords: profile.medicalRecords.map(mapMedicalRecord)
       };
     }
@@ -189,7 +189,7 @@ export async function patientRoutes(app: FastifyInstance) {
 
       const passwordHash = await bcrypt.hash(body.password, 10);
 
-      const patient = await app.prisma.$transaction(async (tx) => {
+      const patient = await app.prisma.$transaction(async (tx: any) => {
         const user = await tx.user.create({
           data: {
             email: body.email,

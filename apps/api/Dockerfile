@@ -1,26 +1,29 @@
-FROM node:18-alpine
-
+FROM node:20-alpine
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+# Copy root workspace files
+COPY ../../package*.json ./
+COPY ../../packages/ ./packages/
+
+# Copy prisma
+COPY ../../prisma/ ./prisma/
+
+# Copy api package files  
+COPY package*.json ./apps/api/
+COPY tsconfig.json ./apps/api/
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --workspace=api --omit=dev
+
+# Generate Prisma client
+RUN npx prisma generate
 
 # Copy source code
-COPY src/ ./src/
+COPY src/ ./apps/api/src/
 
-# Build the application
-RUN npm run build
+# Build
+RUN npm run build --workspace=api
 
-# Expose port
 EXPOSE 4000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:4000/health || exit 1
-
-# Start the application
-CMD ["npm", "start"]
+CMD ["node", "./apps/api/dist/server.js"]
