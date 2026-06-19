@@ -1,0 +1,36 @@
+{
+  "name": "web",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Xestexana masaüstü proqramı",
+  "author": "Sənin adın",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "electron": "electron .",
+    "start:ssr": "next build && next start & electron .",
+    "dist": "electron-builder --config electron-builder.json",
+    "serve": "node server.js"
+  },
+  "main": "main.js",
+  "dependencies": {
+    "@hospital/shared": "file:./shared",
+    "@types/jspdf": "^1.3.3",
+    "electron-updater": "^6.8.3",
+    "express": "^4.22.2",
+    "jspdf": "^4.2.1",
+    "next": "^15.5.19",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "25.6.0",
+    "@types/react": "19.2.14",
+    "electron": "28.2.3",
+    "electron-builder": "24.6.0",
+    "typescript": "^6.0.3"
+  },
+  "build": "electron-builder.json"
+}

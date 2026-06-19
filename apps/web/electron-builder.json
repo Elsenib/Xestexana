@@ -1,0 +1,28 @@
+{
+  "appId": "com.xestexana.desktop",
+  "productName": "Xestexana Platform",
+  "directories": {
+    "output": "dist_electron"
+  },
+  "files": [
+    "main.js",
+    "server.js",
+    "build/icon.ico",
+    "build/icon-256.png",
+    "out/**",
+    "package.json"
+  ],
+  "win": {
+    "icon": "build/icon-256.png",
+    "target": "nsis"
+  },
+  "nsis": {
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "oneClick": false
+  },
+  "publish":{
+    "provider":"generic",
+    "url":"https://xestexana.live/updates/"
+  }
+}

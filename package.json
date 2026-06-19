@@ -1,0 +1,61 @@
+{
+  "name": "hospital-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "apps/mobile",
+    "apps/desktop",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace api",
+    "dev:web": "npm run dev --workspace web",
+    "dev:mobile": "npm run start --workspace mobile",
+    "dev:desktop": "npm run electron --workspace web",
+    "build": "cd apps/web && npm run build",
+    "build:web": "cd apps/web && npm run build",
+    "build:desktop": "npm run dist --workspace web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test:security": "npm run build --workspace api && node --test tests/security-smoke.test.mjs",
+    "db:generate": "npx prisma generate",
+    "db:migrate": "npx prisma migrate dev",
+    "db:studio": "npx prisma studio"
+  },
+  "devDependencies": {
+    "prisma": "^6.7.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "axios": "^1.18.0",
+    "shell-quote": "1.8.4"
+  },
+  "overrides": {
+    "dompurify": "3.4.11",
+    "fast-uri": "4.0.0",
+    "fast-xml-builder": "1.2.0",
+    "form-data": "4.0.6",
+    "joi": "17.13.4",
+    "postcss": "8.5.15",
+    "shell-quote": "1.8.4",
+    "@react-native-community/cli-server-api": {
+      "ws": "6.2.4"
+    },
+    "@react-native/dev-middleware": {
+      "ws": "7.5.11"
+    },
+    "@expo/cli": {
+      "ws": "8.21.0"
+    },
+    "metro": {
+      "ws": "7.5.11"
+    },
+    "react-devtools-core": {
+      "ws": "7.5.11"
+    }
+  },
+  "compilerOptions": {
+    "noImplicitAny": false
+  }
+}

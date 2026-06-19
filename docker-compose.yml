@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: hospital-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hospital_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: hospital-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  api:
+    build: ./apps/api
+    container_name: hospital-api
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/hospital_platform
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - ADMIN_SETUP_KEY=change-this-admin-setup-key-before-production
+      - PORT=4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+
+volumes:
+  postgres-data:

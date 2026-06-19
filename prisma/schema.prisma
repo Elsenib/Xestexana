@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Clinic {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  phone       String?
+  logo        String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Subscription fields
+  subscriptionPlan     String?  // "basic", "professional", "enterprise"
+  subscriptionStatus   String   @default("trial") // "trial", "active", "expired", "cancelled"
+  subscriptionStart    DateTime?
+  subscriptionEnd      DateTime?
+  maxUsers             Int      @default(5)
+  maxPatients          Int      @default(100)
+
+  // Relations
+  users       User[]
+  patients    PatientProfile[]
+  doctors     DoctorProfile[]
+  appointments Appointment[]
+  medicalRecords MedicalRecord[]
+  scheduleSlots ScheduleSlot[]
+
+  @@index([active])
+  @@index([subscriptionStatus])
+}
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  passwordHash    String
+  role            String
+  clinicId        String
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  clinic          Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patientProfile  PatientProfile?
+  doctorProfile   DoctorProfile?
+
+  @@index([clinicId, role])
+}
+
+model PatientProfile {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  clinicId           String
+  identityNumber     String
+  firstName          String
+  lastName           String
+  phone              String
+  gender             String
+  birthDate          DateTime
+  bloodType          String?
+  allergies          String?
+  chronicConditions  String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  clinic             Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  medicalRecords     MedicalRecord[]
+
+  @@index([clinicId, lastName, firstName])
+  @@unique([clinicId, identityNumber])
+}
+
+model DoctorProfile {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  clinicId           String
+  title              String
+  firstName          String
+  lastName           String
+  branch             String
+  roomNumber         String?
+  active             Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  clinic             Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments       Appointment[]
+  scheduleSlots      ScheduleSlot[]
+
+  @@index([clinicId, branch, active])
+}
+
+model Appointment {
+  id                 String             @id @default(cuid())
+  clinicId           String
+  patientId          String
+  doctorId           String
+  startsAt           DateTime
+  endsAt             DateTime
+  status             String             @default("PENDING")
+  channel            String
+  notes              String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  clinic             Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient            PatientProfile     @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor             DoctorProfile      @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, doctorId, startsAt])
+  @@index([clinicId, patientId, startsAt])
+  @@index([clinicId, status, startsAt])
+}
+
+model ScheduleSlot {
+  id                 String         @id @default(cuid())
+  clinicId           String
+  doctorId           String
+  dayOfWeek          Int
+  startMinute        Int
+  endMinute          Int
+  slotDuration       Int            @default(15)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  clinic             Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor             DoctorProfile  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, doctorId, dayOfWeek])
+}
+
+model MedicalRecord {
+  id                 String         @id @default(cuid())
+  clinicId           String
+  patientId          String
+  diagnosis          String
+  treatmentPlan      String
+  prescribedBy       String
+  reportType         String         @default("general")
+  testResults        Json?
+  attachments        Json?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  clinic             Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient            PatientProfile @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, patientId, createdAt])
+}
