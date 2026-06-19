@@ -1,10 +1,5 @@
-import { LocaleProvider } from "../components/LocaleProvider";
-import { RolePortal } from "../components/role-portal";
+import { LovelyDentDashboard } from "../components/lovelydent-dashboard";
 
 export default function HomePage() {
-  return (
-    <LocaleProvider>
-      <RolePortal />
-    </LocaleProvider>
-  );
+  return <LovelyDentDashboard />;
 }

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 
 import "./globals.css";
+import "./lovelydent.css";
 import { ThemeProvider } from "../components/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Hospital Platform",
+  title: "LovelyDent — Klinik idarəetmə sistemi",
   description: "Xəstəxana qeydiyyatı və onlayn randevu platforması"
 };
 
