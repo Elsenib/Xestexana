@@ -32,6 +32,11 @@ model Clinic {
   appointments Appointment[]
   medicalRecords MedicalRecord[]
   scheduleSlots ScheduleSlot[]
+  tasks        Task[]
+  anamnesisVersions PatientAnamnesisVersion[]
+  odontogramSnapshots OdontogramSnapshot[]
+  clinicalEncounters ClinicalEncounter[]
+  clinicalEncounterRevisions ClinicalEncounterRevision[]
 
   @@index([active])
   @@index([subscriptionStatus])
@@ -49,8 +54,38 @@ model User {
   clinic          Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patientProfile  PatientProfile?
   doctorProfile   DoctorProfile?
+  assignedTasks   Task[]         @relation("TaskAssignee")
+  createdTasks    Task[]         @relation("TaskCreator")
+  recordedAnamnesis PatientAnamnesisVersion[] @relation("AnamnesisRecorder")
+  authoredOdontograms OdontogramSnapshot[] @relation("OdontogramAuthor")
+  doctorEncounters ClinicalEncounter[] @relation("EncounterDoctor")
+  encounterRevisions ClinicalEncounterRevision[] @relation("EncounterRevisionAuthor")
 
   @@index([clinicId, role])
+}
+
+model Task {
+  id              String   @id @default(cuid())
+  clinicId        String
+  title           String
+  description     String?
+  assigneeUserId  String
+  createdByUserId String
+  dueDate         DateTime
+  status          String   @default("PENDING")
+  priority        String   @default("MEDIUM")
+  active          Boolean  @default(true)
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  assignee        User     @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Restrict)
+  createdBy       User     @relation("TaskCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, status, dueDate])
+  @@index([clinicId, assigneeUserId, status])
+  @@index([clinicId, active, dueDate])
 }
 
 model PatientProfile {
@@ -72,6 +107,9 @@ model PatientProfile {
   user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   appointments       Appointment[]
   medicalRecords     MedicalRecord[]
+  anamnesisVersions  PatientAnamnesisVersion[]
+  odontogramSnapshots OdontogramSnapshot[]
+  clinicalEncounters ClinicalEncounter[]
 
   @@index([clinicId, lastName, firstName])
   @@unique([clinicId, identityNumber])
@@ -112,6 +150,7 @@ model Appointment {
   clinic             Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient            PatientProfile     @relation(fields: [patientId], references: [id], onDelete: Restrict)
   doctor             DoctorProfile      @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  clinicalEncounters ClinicalEncounter[]
 
   @@index([clinicId, doctorId, startsAt])
   @@index([clinicId, patientId, startsAt])
@@ -150,4 +189,97 @@ model MedicalRecord {
   patient            PatientProfile @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@index([clinicId, patientId, createdAt])
+}
+
+model PatientAnamnesisVersion {
+  id                    String         @id @default(cuid())
+  clinicId              String
+  patientId             String
+  version               Int
+  allergies             Json           @default("[]")
+  chronicConditions     Json           @default("[]")
+  infectiousDiseases    Json           @default("[]")
+  regularMedications    Json           @default("[]")
+  pregnancyOrRisk       String?
+  pastSurgeries         String?
+  medicalNotes          String?
+  criticalAlert         String?
+  confirmedByPatient    Boolean        @default(false)
+  confirmedAt           DateTime?
+  recordedByUserId      String
+  createdAt             DateTime       @default(now())
+  clinic                Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient               PatientProfile @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  recordedBy            User           @relation("AnamnesisRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([patientId, version])
+  @@index([clinicId, patientId, createdAt])
+}
+
+model OdontogramSnapshot {
+  id                    String         @id @default(cuid())
+  clinicId              String
+  patientId             String
+  clinicalEncounterId   String?
+  numberingSystem       String         @default("FDI")
+  dentition             String         @default("PERMANENT")
+  entries               Json
+  note                  String?
+  authoredByUserId      String
+  createdAt             DateTime       @default(now())
+  clinic                Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient               PatientProfile @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  clinicalEncounter     ClinicalEncounter? @relation(fields: [clinicalEncounterId], references: [id], onDelete: Restrict)
+  authoredBy            User           @relation("OdontogramAuthor", fields: [authoredByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, patientId, createdAt])
+  @@index([clinicalEncounterId])
+}
+
+model ClinicalEncounter {
+  id                    String         @id @default(cuid())
+  clinicId              String
+  patientId             String
+  appointmentId         String?
+  doctorUserId          String
+  status                String         @default("DRAFT")
+  complaint             String?
+  examination           String?
+  diagnosis             String?
+  clinicalNotes         String?
+  recommendations       String?
+  prescription          String?
+  nextVisitAt           DateTime?
+  signedAt              DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  clinic                Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient               PatientProfile @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  appointment           Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  doctor                User           @relation("EncounterDoctor", fields: [doctorUserId], references: [id], onDelete: Restrict)
+  odontogramSnapshots   OdontogramSnapshot[]
+  revisions             ClinicalEncounterRevision[]
+
+  @@index([clinicId, patientId, createdAt])
+  @@index([clinicId, doctorUserId, status])
+  @@index([appointmentId])
+}
+
+model ClinicalEncounterRevision {
+  id                    String            @id @default(cuid())
+  clinicId              String
+  encounterId           String
+  revision              Int
+  reason                String
+  previousContent       Json
+  replacementContent    Json
+  authoredByUserId      String
+  createdAt             DateTime          @default(now())
+  clinic                Clinic            @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  encounter             ClinicalEncounter @relation(fields: [encounterId], references: [id], onDelete: Restrict)
+  authoredBy            User              @relation("EncounterRevisionAuthor", fields: [authoredByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([encounterId, revision])
+  @@index([clinicId, encounterId, createdAt])
 }

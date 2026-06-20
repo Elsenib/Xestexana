@@ -241,10 +241,10 @@ export async function patientRoutes(app: FastifyInstance) {
       const params = z.object({ id: z.string().min(1) }).parse(request.params);
       const clinicId = request.user.clinicId; // ✅ əlavə edildi
 
-      const profile = await app.prisma.patientProfile.findUnique({
+      const profile = await app.prisma.patientProfile.findFirst({
         where: {
           id: params.id,
-          clinicId // ✅ yalnız öz klinikasının xəstəsinə baxmaq olar
+          clinicId
         },
         include: {
           user: {

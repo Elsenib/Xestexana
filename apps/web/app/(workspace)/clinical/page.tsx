@@ -1,0 +1,1 @@
+export default function Page(){return <section className="ws-coming"><p className="ws-eyebrow">Klinik nüvə</p><h1>Klinik iş</h1><p>Anamnez, odontogram, klinik qeyd və müalicə planı pasiyent kontekstində burada birləşəcək.</p></section>}

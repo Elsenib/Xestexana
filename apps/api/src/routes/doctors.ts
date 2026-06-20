@@ -147,7 +147,7 @@ export async function doctorRoutes(app: FastifyInstance) {
   app.get(
     "/doctors",
     {
-      preHandler: [app.authenticate],
+      preHandler: [app.authenticate, app.authorize(["ADMIN", "CALL_CENTER", "NURSE", "DOCTOR", "PATIENT"])],
     },
     async (request) => {
       const query = listQuerySchema.parse(request.query);
@@ -237,8 +237,8 @@ export async function doctorRoutes(app: FastifyInstance) {
     { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const doctor = await app.prisma.doctorProfile.findUnique({
-        where: { id, clinicId: request.user.clinicId }, // ✅ əlavə edildi
+      const doctor = await app.prisma.doctorProfile.findFirst({
+        where: { id, clinicId: request.user.clinicId },
       });
       if (!doctor) return reply.code(404).send({ message: "Hekim tapilmadi." });
       await app.prisma.$transaction([
@@ -261,8 +261,8 @@ export async function doctorRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
 
-      const doctor = await app.prisma.doctorProfile.findUnique({
-        where: { id, clinicId: request.user.clinicId }, // ✅ əlavə edildi
+      const doctor = await app.prisma.doctorProfile.findFirst({
+        where: { id, clinicId: request.user.clinicId },
       });
       if (!doctor) return reply.code(404).send({ message: "Hekim tapilmadi." });
 

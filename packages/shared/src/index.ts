@@ -5,7 +5,7 @@ export type AppointmentStatus =
   | "CANCELED"
   | "NO_SHOW";
 
-export type UserRole = "ADMIN" | "DOCTOR" | "NURSE" | "PATIENT" | "CALL_CENTER";
+export type UserRole = "SUPER_ADMIN" | "ADMIN" | "DOCTOR" | "NURSE" | "PATIENT" | "CALL_CENTER" | "CASHIER" | "INVENTORY_MANAGER" | "ACCOUNTANT" | "MANAGEMENT";
 
 export interface AppointmentSummary {
   id: string;

@@ -20,7 +20,10 @@ import { medicalRecordRoutes } from "./routes/medical-records.js";
 import { nurseRoutes } from "./routes/nurses.js";
 import { observabilityRoutes } from "./routes/observability.js";
 import { patientRoutes } from "./routes/patients.js";
+import { paymesRoutes } from "./routes/paymes.js";
 import { subscriptionRoutes } from "./routes/subscription.js";
+import { taskRoutes } from "./routes/tasks.js";
+import { clinicalCoreRoutes } from "./routes/clinical-core.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -118,7 +121,10 @@ export function buildApp() {
   app.register(medicalRecordRoutes, { prefix: "/api" });
   app.register(healthRoutes, { prefix: "/api" });
   app.register(subscriptionRoutes, { prefix: "/api" });
+  app.register(paymesRoutes, { prefix: "/api" });
+  app.register(taskRoutes, { prefix: "/api" });
   app.register(observabilityRoutes, { prefix: "/api" });
+  app.register(clinicalCoreRoutes, { prefix: "/api" });
 
   return app;
 }

@@ -1,0 +1,1 @@
+export default function Page(){return <section className="ws-coming"><p className="ws-eyebrow">Anbar</p><h1>Stok və materiallar</h1><p>Material hərəkətləri, minimum stok və alış prosesi bu modulda idarə olunacaq.</p></section>}

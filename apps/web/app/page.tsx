@@ -1,5 +1,5 @@
-import { LovelyDentDashboard } from "../components/lovelydent-dashboard";
+import { LoginScreen } from "../components/workspace/login-screen";
 
 export default function HomePage() {
-  return <LovelyDentDashboard />;
+  return <LoginScreen />;
 }

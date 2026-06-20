@@ -1,0 +1,1 @@
+export default function Page(){return <section className="ws-coming"><p className="ws-eyebrow">Modul 02</p><h1>Təqvim və qəbullar</h1><p>Həkim sütunları, kreslo görünüşü və qəbul axını növbəti iş paketində burada qurulacaq.</p></section>}

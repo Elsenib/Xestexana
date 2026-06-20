@@ -1,0 +1,1 @@
+export default function Page(){return <section className="ws-coming"><p className="ws-eyebrow">İdarəetmə</p><h1>Hesabatlar</h1><p>Klinik, maliyyə və əməliyyat göstəriciləri qərar yönümlü şəkildə təqdim olunacaq.</p></section>}

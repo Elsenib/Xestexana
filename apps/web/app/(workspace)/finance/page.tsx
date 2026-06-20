@@ -1,0 +1,1 @@
+export default function Page(){return <section className="ws-coming"><p className="ws-eyebrow">Maliyyə</p><h1>Kassa və maliyyə</h1><p>Pasiyent hesabı, ödənişlər və kassa növbəsi ayrıca iş axını kimi hazırlanacaq.</p></section>}

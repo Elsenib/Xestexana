@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 import "./globals.css";
 import "./lovelydent.css";
+import "./workspace.css";
+import "./clinical.css";
 import { ThemeProvider } from "../components/ThemeProvider";
 
 export const metadata: Metadata = {
