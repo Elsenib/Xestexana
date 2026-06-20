@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type UserRole = "SUPER_ADMIN" | "ADMIN" | "DOCTOR" | "NURSE" | "PATIENT" | "CALL_CENTER";
+type UserRole =
+  | "SUPER_ADMIN"
+  | "ADMIN"
+  | "DOCTOR"
+  | "NURSE"
+  | "PATIENT"
+  | "CALL_CENTER";
 
 type CurrentUser = {
   id: string;
@@ -74,7 +80,9 @@ type BackendCapabilities = {
 type PanelView = "SUPER_ADMIN" | "ADMIN" | "DOCTOR" | "RECEPTION";
 type WorkProgram = "OPERATIONS" | "ANALYTICS" | "LAB";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://api-production-e6391.up.railway.app/api";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  "https://api-production-e6391.up.railway.app/api";
 const TOKEN_KEY = "ld_staff_token";
 
 type MenuItem = {
@@ -109,61 +117,124 @@ const menuItems: MenuItem[] = [
   { key: "tasks", label: "Tapşırıqlar", icon: "✓" },
   { key: "notifications", label: "Bildirişlər", icon: "B" },
   { key: "reports", label: "Hesabatlar", icon: "H", superOnly: true },
-  { key: "users", label: "İstifadəçilər", icon: "✓", adminOnly: true, superOnly: true }
-] ;
+  {
+    key: "users",
+    label: "İstifadəçilər",
+    icon: "✓",
+    adminOnly: true,
+    superOnly: true,
+  },
+];
 
-const panelConfigs: Record<PanelView, { label: string; icon: string; menuKeys: MenuItem["key"][]; description: string }> = {
+const panelConfigs: Record<
+  PanelView,
+  {
+    label: string;
+    icon: string;
+    menuKeys: MenuItem["key"][];
+    description: string;
+  }
+> = {
   SUPER_ADMIN: {
     label: "Super Admin Paneli",
     icon: "SA",
-    menuKeys: ["dashboard", "finance", "reports", "users", "notifications", "tasks"],
-    description: "Klinikalararası nəzarət, hesabat və strateji görünüş"
+    menuKeys: [
+      "dashboard",
+      "finance",
+      "reports",
+      "users",
+      "notifications",
+      "tasks",
+    ],
+    description: "Klinikalararası nəzarət, hesabat və strateji görünüş",
   },
   ADMIN: {
     label: "Admin Paneli",
     icon: "AD",
-    menuKeys: ["dashboard", "appointments", "patients", "doctors", "treatments", "cash", "inventory", "tasks", "notifications"],
-    description: "Gündəlik klinika əməliyyatı, komanda və axın idarəsi"
+    menuKeys: [
+      "dashboard",
+      "appointments",
+      "patients",
+      "doctors",
+      "treatments",
+      "cash",
+      "inventory",
+      "tasks",
+      "notifications",
+    ],
+    description: "Gündəlik klinika əməliyyatı, komanda və axın idarəsi",
   },
   DOCTOR: {
     label: "Həkim Paneli",
     icon: "DR",
-    menuKeys: ["dashboard", "appointments", "patients", "treatments", "tasks", "notifications"],
-    description: "Pasiyent, müalicə planı və iş gündəliyi"
+    menuKeys: [
+      "dashboard",
+      "appointments",
+      "patients",
+      "treatments",
+      "tasks",
+      "notifications",
+    ],
+    description: "Pasiyent, müalicə planı və iş gündəliyi",
   },
   RECEPTION: {
     label: "Qeydiyyat Paneli",
     icon: "RC",
-    menuKeys: ["dashboard", "appointments", "patients", "cash", "notifications"],
-    description: "Qeydiyyat, randevu və pasiyent əlaqə axını"
-  }
+    menuKeys: [
+      "dashboard",
+      "appointments",
+      "patients",
+      "cash",
+      "notifications",
+    ],
+    description: "Qeydiyyat, randevu və pasiyent əlaqə axını",
+  },
 };
 
-const workProgramConfigs: Record<WorkProgram, { label: string; icon: string; menuKeys: MenuItem["key"][]; description: string }> = {
+const workProgramConfigs: Record<
+  WorkProgram,
+  {
+    label: string;
+    icon: string;
+    menuKeys: MenuItem["key"][];
+    description: string;
+  }
+> = {
   OPERATIONS: {
     label: "Operativ",
     icon: "OP",
-    menuKeys: ["dashboard", "appointments", "patients", "doctors", "treatments", "cash", "inventory", "tasks", "notifications", "users"],
-    description: "Gündəlik panel işi: qəbul, randevu, müalicə və kassa"
+    menuKeys: [
+      "dashboard",
+      "appointments",
+      "patients",
+      "doctors",
+      "treatments",
+      "cash",
+      "inventory",
+      "tasks",
+      "notifications",
+      "users",
+    ],
+    description: "Gündəlik panel işi: qəbul, randevu, müalicə və kassa",
   },
   ANALYTICS: {
     label: "Hesabat",
     icon: "AN",
     menuKeys: ["dashboard", "finance", "reports", "notifications"],
-    description: "Statistika, rəhbərlik baxışı və maliyyə göstəriciləri"
+    description: "Statistika, rəhbərlik baxışı və maliyyə göstəriciləri",
   },
   LAB: {
     label: "Laboratoriya",
     icon: "LB",
     menuKeys: ["patients", "appointments", "treatments", "notifications"],
-    description: "Lab axını və pasiyent klinik məlumatlarının işi"
-  }
+    description: "Lab axını və pasiyent klinik məlumatlarının işi",
+  },
 };
 
 function formatDate(dateIso: string) {
   return new Intl.DateTimeFormat("az-Latn-AZ", {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
   }).format(new Date(dateIso));
 }
 
@@ -211,7 +282,7 @@ export function LovelyDentDashboard() {
     totalRequests: 0,
     totalErrors: 0,
     averageResponseMs: 0,
-    p95ResponseMs: 0
+    p95ResponseMs: 0,
   });
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [patients, setPatients] = useState<PatientRow[]>([]);
@@ -221,7 +292,7 @@ export function LovelyDentDashboard() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [capabilities, setCapabilities] = useState<BackendCapabilities>({
     tasks: false,
-    observability: false
+    observability: false,
   });
 
   const [patientForm, setPatientForm] = useState({
@@ -232,7 +303,7 @@ export function LovelyDentDashboard() {
     lastName: "",
     phone: "",
     gender: "FEMALE",
-    birthDate: "1990-01-01"
+    birthDate: "1990-01-01",
   });
 
   const [appointmentForm, setAppointmentForm] = useState({
@@ -241,7 +312,7 @@ export function LovelyDentDashboard() {
     startsAt: toInputDateTime(24),
     endsAt: toInputDateTime(24.5),
     channel: "call-center",
-    notes: ""
+    notes: "",
   });
 
   const [taskForm, setTaskForm] = useState({
@@ -249,13 +320,13 @@ export function LovelyDentDashboard() {
     description: "",
     assigneeUserId: "",
     dueDate: toInputDateTime(24),
-    priority: "MEDIUM"
+    priority: "MEDIUM",
   });
 
   const [cashForm, setCashForm] = useState({
     amount: "120",
     description: "Qismən ödəniş",
-    customerEmail: ""
+    customerEmail: "",
   });
   const [paymentLink, setPaymentLink] = useState("");
 
@@ -263,8 +334,10 @@ export function LovelyDentDashboard() {
   const [panelView, setPanelView] = useState<PanelView>("ADMIN");
   const [workProgram, setWorkProgram] = useState<WorkProgram>("OPERATIONS");
 
-  const isAnyAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
-  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN" || panelView === "SUPER_ADMIN";
+  const isAnyAdmin =
+    currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
+  const isSuperAdmin =
+    currentUser?.role === "SUPER_ADMIN" || panelView === "SUPER_ADMIN";
 
   const availablePanels = useMemo<PanelView[]>(() => {
     if (currentUser?.role === "SUPER_ADMIN") {
@@ -351,9 +424,22 @@ export function LovelyDentDashboard() {
   const quickMenuItems = useMemo(
     () =>
       visibleMenu.filter((item) =>
-        ["dashboard", "appointments", "patients", "doctors", "treatments", "cash", "inventory", "tasks", "notifications", "reports", "users", "finance"].includes(item.key)
+        [
+          "dashboard",
+          "appointments",
+          "patients",
+          "doctors",
+          "treatments",
+          "cash",
+          "inventory",
+          "tasks",
+          "notifications",
+          "reports",
+          "users",
+          "finance",
+        ].includes(item.key),
       ),
-    [visibleMenu]
+    [visibleMenu],
   );
 
   async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -367,7 +453,7 @@ export function LovelyDentDashboard() {
 
     const response = await fetch(`${API_BASE}${path}`, {
       ...init,
-      headers
+      headers,
     });
 
     if (!response.ok) {
@@ -390,7 +476,7 @@ export function LovelyDentDashboard() {
   async function loadData(
     authToken = token,
     role = currentUser?.role,
-    caps: BackendCapabilities = capabilities
+    caps: BackendCapabilities = capabilities,
   ) {
     if (!authToken || !role) {
       return;
@@ -406,9 +492,12 @@ export function LovelyDentDashboard() {
       setError("");
 
       const requests: Promise<any>[] = [
-        fetch(`${API_BASE}/appointments/availability?startDate=${encodeURIComponent(now.toISOString())}&endDate=${encodeURIComponent(nextWeek.toISOString())}`, { headers }),
+        fetch(
+          `${API_BASE}/appointments/availability?startDate=${encodeURIComponent(now.toISOString())}&endDate=${encodeURIComponent(nextWeek.toISOString())}`,
+          { headers },
+        ),
         fetch(`${API_BASE}/patients?take=100`, { headers }),
-        fetch(`${API_BASE}/doctors?take=100`, { headers })
+        fetch(`${API_BASE}/doctors?take=100`, { headers }),
       ];
 
       if (caps.tasks) {
@@ -417,7 +506,9 @@ export function LovelyDentDashboard() {
 
       if (hasAdminScope) {
         if (caps.observability) {
-          requests.push(fetch(`${API_BASE}/observability/metrics`, { headers }));
+          requests.push(
+            fetch(`${API_BASE}/observability/metrics`, { headers }),
+          );
         }
         requests.push(fetch(`${API_BASE}/admin-users?take=100`, { headers }));
         requests.push(fetch(`${API_BASE}/nurses?take=100`, { headers }));
@@ -429,7 +520,8 @@ export function LovelyDentDashboard() {
       const patientsRes = responses[index++];
       const doctorsRes = responses[index++];
       const tasksRes = caps.tasks ? responses[index++] : null;
-      const metricsRes = hasAdminScope && caps.observability ? responses[index++] : null;
+      const metricsRes =
+        hasAdminScope && caps.observability ? responses[index++] : null;
       const staffRes = hasAdminScope ? responses[index++] : null;
       const nursesRes = hasAdminScope ? responses[index++] : null;
 
@@ -458,7 +550,10 @@ export function LovelyDentDashboard() {
         const rows = Array.isArray(data) ? data : [];
         setTasks(rows);
         if (!taskForm.assigneeUserId && rows.length > 0) {
-          setTaskForm((prev) => ({ ...prev, assigneeUserId: rows[0]?.assignee?.id ?? prev.assigneeUserId }));
+          setTaskForm((prev) => ({
+            ...prev,
+            assigneeUserId: rows[0]?.assignee?.id ?? prev.assigneeUserId,
+          }));
         }
       }
       if (metricsRes?.ok) {
@@ -467,7 +562,7 @@ export function LovelyDentDashboard() {
           totalRequests: data.totalRequests ?? 0,
           totalErrors: data.totalErrors ?? 0,
           averageResponseMs: data.averageResponseMs ?? 0,
-          p95ResponseMs: data.p95ResponseMs ?? 0
+          p95ResponseMs: data.p95ResponseMs ?? 0,
         });
       }
       if (staffRes?.ok) {
@@ -479,7 +574,11 @@ export function LovelyDentDashboard() {
         setNurses(Array.isArray(data) ? data : []);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Panel məlumatları yüklənmədi.");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Panel məlumatları yüklənmədi.",
+      );
     } finally {
       setLoading(false);
     }
@@ -487,18 +586,18 @@ export function LovelyDentDashboard() {
 
   async function hydrateSession(authToken: string) {
     const me = await requestJson<CurrentUser>("/auth/me", {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${authToken}` },
     });
     setCurrentUser(me);
     const tasksRes = await fetch(`${API_BASE}/tasks?take=1`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${authToken}` },
     });
     const metricsRes = await fetch(`${API_BASE}/observability/metrics`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${authToken}` },
     });
     const caps = {
       tasks: tasksRes.status !== 404,
-      observability: metricsRes.status !== 404
+      observability: metricsRes.status !== 404,
     };
     setCapabilities(caps);
     await loadData(authToken, me.role, caps);
@@ -528,10 +627,13 @@ export function LovelyDentDashboard() {
 
     try {
       setLoading(true);
-      const payload = await requestJson<{ token: string; user: CurrentUser }>("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password })
-      });
+      const payload = await requestJson<{ token: string; user: CurrentUser }>(
+        "/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+        },
+      );
 
       if (payload.user.role === "PATIENT") {
         setError("Bu giriş ekranı yalnız işçi panelləri üçündür.");
@@ -544,7 +646,11 @@ export function LovelyDentDashboard() {
       setMessage("Giriş uğurludur.");
       await loadData(payload.token, payload.user.role);
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Giriş uğursuz oldu.");
+      setError(
+        loginError instanceof Error
+          ? loginError.message
+          : "Giriş uğursuz oldu.",
+      );
     } finally {
       setLoading(false);
     }
@@ -560,8 +666,10 @@ export function LovelyDentDashboard() {
         method: "POST",
         body: JSON.stringify({
           ...patientForm,
-          birthDate: new Date(`${patientForm.birthDate}T00:00:00.000Z`).toISOString()
-        })
+          birthDate: new Date(
+            `${patientForm.birthDate}T00:00:00.000Z`,
+          ).toISOString(),
+        }),
       });
 
       setMessage("Pasiyent uğurla yaradıldı.");
@@ -573,11 +681,15 @@ export function LovelyDentDashboard() {
         lastName: "",
         phone: "",
         gender: "FEMALE",
-        birthDate: "1990-01-01"
+        birthDate: "1990-01-01",
       });
       await loadData();
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Pasiyent yaradılmadı.");
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : "Pasiyent yaradılmadı.",
+      );
     } finally {
       setLoading(false);
     }
@@ -599,8 +711,8 @@ export function LovelyDentDashboard() {
         body: JSON.stringify({
           ...appointmentForm,
           startsAt: new Date(appointmentForm.startsAt).toISOString(),
-          endsAt: new Date(appointmentForm.endsAt).toISOString()
-        })
+          endsAt: new Date(appointmentForm.endsAt).toISOString(),
+        }),
       });
 
       setMessage("Randevu uğurla yaradıldı.");
@@ -608,11 +720,15 @@ export function LovelyDentDashboard() {
         ...prev,
         startsAt: toInputDateTime(24),
         endsAt: toInputDateTime(24.5),
-        notes: ""
+        notes: "",
       }));
       await loadData();
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Randevu yaradılmadı.");
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : "Randevu yaradılmadı.",
+      );
     } finally {
       setLoading(false);
     }
@@ -638,8 +754,8 @@ export function LovelyDentDashboard() {
           description: taskForm.description || undefined,
           assigneeUserId: taskForm.assigneeUserId,
           dueDate: new Date(taskForm.dueDate).toISOString(),
-          priority: taskForm.priority
-        })
+          priority: taskForm.priority,
+        }),
       });
 
       setMessage("Tapşırıq uğurla yaradıldı.");
@@ -648,11 +764,15 @@ export function LovelyDentDashboard() {
         title: "",
         description: "",
         dueDate: toInputDateTime(24),
-        priority: "MEDIUM"
+        priority: "MEDIUM",
       }));
       await loadData();
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Tapşırıq yaradılmadı.");
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : "Tapşırıq yaradılmadı.",
+      );
     } finally {
       setLoading(false);
     }
@@ -664,26 +784,37 @@ export function LovelyDentDashboard() {
 
     const amount = Number(cashForm.amount);
 
-    if (!Number.isFinite(amount) || amount <= 0 || !cashForm.customerEmail.trim()) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !cashForm.customerEmail.trim()
+    ) {
       setError("Ödəniş məbləği və pasiyent e-poçtu məcburidir.");
       return;
     }
 
     try {
       setLoading(true);
-      const payload = await requestJson<{ paymentUrl: string }>("/payment/paymes-initiate", {
-        method: "POST",
-        body: JSON.stringify({
-          amount,
-          description: cashForm.description.trim() || "Kassa ödənişi",
-          customerEmail: cashForm.customerEmail.trim()
-        })
-      });
+      const payload = await requestJson<{ paymentUrl: string }>(
+        "/payment/paymes-initiate",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            amount,
+            description: cashForm.description.trim() || "Kassa ödənişi",
+            customerEmail: cashForm.customerEmail.trim(),
+          }),
+        },
+      );
 
       setPaymentLink(payload.paymentUrl);
       setMessage("Ödəniş linki yaradıldı.");
     } catch (paymentError) {
-      setError(paymentError instanceof Error ? paymentError.message : "Ödəniş linki yaradılmadı.");
+      setError(
+        paymentError instanceof Error
+          ? paymentError.message
+          : "Ödəniş linki yaradılmadı.",
+      );
     } finally {
       setLoading(false);
     }
@@ -699,11 +830,15 @@ export function LovelyDentDashboard() {
       setLoading(true);
       await requestJson(`/tasks/${taskId}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status }),
       });
       await loadData();
     } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Tapşırıq statusu yenilənmədi.");
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Tapşırıq statusu yenilənmədi.",
+      );
     } finally {
       setLoading(false);
     }
@@ -729,20 +864,36 @@ export function LovelyDentDashboard() {
         <section className="ld-auth-card">
           <img src="/lovelydent-icon.png" alt="LovelyDent" />
           <h1>LovelyDent İşçi Girişi</h1>
-          <p>Admin, çağrı mərkəzi, həkim və tibb bacısı panellərinə təhlükəsiz giriş.</p>
+          <p>
+            Admin, çağrı mərkəzi, həkim və tibb bacısı panellərinə təhlükəsiz
+            giriş.
+          </p>
 
           {message && <div className="ld-banner success">{message}</div>}
           {error && <div className="ld-banner error">{error}</div>}
 
           <label>
             E-poçt
-            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@lovelydent.az" />
+            <input
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="ornek@lovelydent.az"
+            />
           </label>
           <label>
             Şifrə
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="********" />
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="********"
+            />
           </label>
-          <button className="ld-primary" onClick={() => void doLogin()} disabled={loading}>
+          <button
+            className="ld-primary"
+            onClick={() => void doLogin()}
+            disabled={loading}
+          >
             {loading ? "Giriş edilir..." : "Daxil ol"}
           </button>
         </section>
@@ -758,24 +909,24 @@ export function LovelyDentDashboard() {
       ? [
           "Klinikalararası performans və gəlir trendlərini izlə",
           "Riskli qərarları üst səviyyədə prioritetləşdir",
-          "Abunəlik, hesabat və maliyyə xəttini rəhbərlik baxışında saxla"
+          "Abunəlik, hesabat və maliyyə xəttini rəhbərlik baxışında saxla",
         ]
       : panelView === "DOCTOR"
         ? [
             "Pasiyent tarixçəsini və müalicə planını qısa saxla",
             "Randevuların icrasını və müalicə mərhələsini izləyin",
-            "Klinik qeydləri həkim panelində tamamla"
+            "Klinik qeydləri həkim panelində tamamla",
           ]
         : panelView === "RECEPTION"
           ? [
               "Qeydiyyat və randevu axınını sürətli saxla",
               "Pasiyent məlumatını dəqiq tamamla",
-              "Qeydiyyat tamamlananda bildiriş axınını izləyin"
+              "Qeydiyyat tamamlananda bildiriş axınını izləyin",
             ]
           : [
               "Gündəlik randevu və pasiyent axınını sabit tut",
               "Heyət tapşırıqlarını gecikmədən idarə et",
-              "Kassa, müalicə və qəbz proseslərini standartlaşdır"
+              "Kassa, müalicə və qəbz proseslərini standartlaşdır",
             ];
 
   return (
@@ -786,13 +937,18 @@ export function LovelyDentDashboard() {
           <div>
             <b>LovelyDent Command Center</b>
             <span>
-              {panelConfigs[panelView].label} · {panelConfigs[panelView].description}
+              {panelConfigs[panelView].label} ·{" "}
+              {panelConfigs[panelView].description}
             </span>
           </div>
         </div>
 
         <div className="ld-shell-actions">
-          <div className="ld-panel-switcher" role="tablist" aria-label="Panel keçidləri">
+          <div
+            className="ld-panel-switcher"
+            role="tablist"
+            aria-label="Panel keçidləri"
+          >
             {availablePanels.map((panel) => (
               <button
                 key={panel}
@@ -807,7 +963,11 @@ export function LovelyDentDashboard() {
             ))}
           </div>
 
-          <div className="ld-program-switcher" role="tablist" aria-label="Proqram keçidləri">
+          <div
+            className="ld-program-switcher"
+            role="tablist"
+            aria-label="Proqram keçidləri"
+          >
             {availablePrograms.map((program) => (
               <button
                 key={program}
@@ -826,20 +986,32 @@ export function LovelyDentDashboard() {
             <i>{currentUser.email.slice(0, 2).toUpperCase()}</i>
             <div>
               <b>{currentUser.email}</b>
-              <span>{currentUser.role} · {panelView}</span>
+              <span>
+                {currentUser.role} · {panelView}
+              </span>
             </div>
           </div>
 
-          <button className="ld-primary" onClick={() => void loadData()} disabled={loading}>
+          <button
+            className="ld-primary"
+            onClick={() => void loadData()}
+            disabled={loading}
+          >
             {loading ? "Yüklənir..." : "Sinxron et"}
           </button>
-          <button className="ld-ghost" onClick={doLogout}>Çıxış</button>
+          <button className="ld-ghost" onClick={doLogout}>
+            Çıxış
+          </button>
         </div>
       </header>
 
       <nav className="ld-command-nav" aria-label="Panel bölmələri">
         {visibleMenu.map((item) => (
-          <button key={item.key} onClick={() => setActive(item.key)} className={active === item.key ? "active" : ""}>
+          <button
+            key={item.key}
+            onClick={() => setActive(item.key)}
+            className={active === item.key ? "active" : ""}
+          >
             <i>{item.icon}</i>
             {item.label}
           </button>
@@ -864,257 +1036,484 @@ export function LovelyDentDashboard() {
           <article>
             <span>Tapşırıq temperaturu</span>
             <b>{tasks.length}</b>
-            <small>{overdueTasks > 0 ? `${overdueTasks} gecikmiş tapşırıq var` : "Gecikən tapşırıq yoxdur"}</small>
+            <small>
+              {overdueTasks > 0
+                ? `${overdueTasks} gecikmiş tapşırıq var`
+                : "Gecikən tapşırıq yoxdur"}
+            </small>
           </article>
         </section>
 
         <section className="ld-kpi-strip">
-          <Stat label="RANDEVU AXINI" value={String(appointments.length)} detail="Qarşıdakı 7 gün" icon="◫" tone="yellow" />
-          <Stat label="PASİYENT BAZASI" value={String(patients.length)} detail="Aktiv qeydiyyatlar" icon="P" tone="blue" />
-          <Stat label="KLİNİK HEYƏT" value={String(doctors.length)} detail="Aktiv həkimlər" icon="+" tone="green" />
           <Stat
-            label={capabilities.observability ? "SİSTEM RİSKİ" : "TAPŞIRIQ YÜKÜ"}
-            value={capabilities.observability ? String(metrics.totalErrors) : String(tasks.length)}
-            detail={capabilities.observability ? `P95: ${Math.round(metrics.p95ResponseMs)} ms` : "Cari tapşırıqlar"}
+            label="RANDEVU AXINI"
+            value={String(appointments.length)}
+            detail="Qarşıdakı 7 gün"
+            icon="◫"
+            tone="yellow"
+          />
+          <Stat
+            label="PASİYENT BAZASI"
+            value={String(patients.length)}
+            detail="Aktiv qeydiyyatlar"
+            icon="P"
+            tone="blue"
+          />
+          <Stat
+            label="KLİNİK HEYƏT"
+            value={String(doctors.length)}
+            detail="Aktiv həkimlər"
+            icon="+"
+            tone="green"
+          />
+          <Stat
+            label={
+              capabilities.observability ? "SİSTEM RİSKİ" : "TAPŞIRIQ YÜKÜ"
+            }
+            value={
+              capabilities.observability
+                ? String(metrics.totalErrors)
+                : String(tasks.length)
+            }
+            detail={
+              capabilities.observability
+                ? `P95: ${Math.round(metrics.p95ResponseMs)} ms`
+                : "Cari tapşırıqlar"
+            }
             icon="!"
             tone="violet"
           />
         </section>
 
-          {active === "tasks" && capabilities.tasks && (
-            <section className="ld-card ld-simple-list">
-              <CardHead title="Tapşırıqlar" subtitle="Status, prioritet və gecikmə izlənməsi" />
+        {active === "tasks" && capabilities.tasks && (
+          <section className="ld-card ld-simple-list">
+            <CardHead
+              title="Tapşırıqlar"
+              subtitle="Status, prioritet və gecikmə izlənməsi"
+            />
 
-              {isAnyAdmin && (
-                <div className="ld-form-grid">
-                  <input
-                    placeholder="Tapşırıq başlığı"
-                    value={taskForm.title}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, title: event.target.value }))}
-                  />
-                  <input
-                    placeholder="Qısa açıqlama"
-                    value={taskForm.description}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, description: event.target.value }))}
-                  />
-                  <select
-                    value={taskForm.assigneeUserId}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, assigneeUserId: event.target.value }))}
-                  >
-                    <option value="">Məsul işçi seçin</option>
-                    {assignableUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.email} ({user.role})
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="datetime-local"
-                    value={taskForm.dueDate}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, dueDate: event.target.value }))}
-                  />
-                  <select
-                    value={taskForm.priority}
-                    onChange={(event) => setTaskForm((prev) => ({ ...prev, priority: event.target.value }))}
-                  >
-                    <option value="LOW">Aşağı</option>
-                    <option value="MEDIUM">Orta</option>
-                    <option value="HIGH">Yüksək</option>
-                  </select>
-                  <button className="ld-primary" onClick={() => void createTask()} disabled={loading}>
-                    Tapşırıq yarat
-                  </button>
-                </div>
-              )}
-
-              {tasks.length === 0 && <EmptyState text="Hələ tapşırıq yoxdur." />}
-              {tasks.map((task) => (
-                <div className="ld-simple-row" key={task.id}>
-                  <b>{task.title}</b>
-                  <span>{task.assignee.email}</span>
-                  <span>{formatDate(task.dueDate)}</span>
-                  <em className={task.isOverdue ? "wait" : task.status === "COMPLETED" ? "live" : ""}>
-                    {taskStatusLabel(task.status, task.isOverdue)}
-                  </em>
-                  <div className="ld-task-actions">
-                    <button onClick={() => void updateTaskStatus(task.id, "IN_PROGRESS")}>İcradadır</button>
-                    <button onClick={() => void updateTaskStatus(task.id, "COMPLETED")}>Tamamlandı</button>
-                    <button onClick={() => void updateTaskStatus(task.id, "CANCELLED")}>Ləğv et</button>
-                  </div>
-                </div>
-              ))}
-            </section>
-          )}
-
-          {active === "treatments" && (
-            <section className="ld-module-shell">
-              <ModuleHeader title="Müalicə paneli" subtitle="Mərhələ, xidmət, qiymətləndirmə və zəmanət axını" />
-              <div className="ld-module-grid">
-                <ModuleCard
-                  title="Müalicə planı"
-                  lines={[
-                    "Pasiyent üçün mərhələli plan",
-                    "İcra statusu: planlandı / icrada / tamamlandı",
-                    "Həkim qeydləri və tarixçə"
-                  ]}
-                />
-                <ModuleCard
-                  title="Xidmət siyahısı"
-                  lines={[
-                    "Klinika xidmət kataloqu",
-                    "Qiymət və müddət konfiqurasiyası",
-                    "Filial/şöbə üzrə fərqləndirmə"
-                  ]}
-                />
-                <ModuleCard
-                  title="Zəmanət və implant"
-                  lines={[
-                    "Zəmanət kartı şablonu",
-                    "İmplant marka/seriya məlumatı",
-                    "Nəzarət vizit tarixçəsi"
-                  ]}
-                />
-              </div>
-              <ModuleTable
-                title="Müalicə iş axını (vizual)"
-                columns={["Mərhələ", "Məsul", "Status", "Tarix"]}
-                rows={[
-                  ["Diaqnostika", "Dr. Nigar", "Tamamlanıb", "20.06.2026"],
-                  ["Plan təsdiqi", "Dr. Nigar", "İcradadır", "21.06.2026"],
-                  ["Prosedur", "Tibb bacısı", "Gözləyir", "22.06.2026"]
-                ]}
-              />
-            </section>
-          )}
-
-          {active === "cash" && (
-            <section className="ld-module-shell">
-              <ModuleHeader title="Kassa paneli" subtitle="Ödəniş, qismən ödəniş, depozit və borc izlənməsi" />
-              <div className="ld-module-grid">
-                <ModuleCard title="Ödənişlər" lines={["Nağd, kart və transfer axını", "Paymes linki ilə uzaq ödəniş", "Qəbz və əməliyyat izi"]} />
-                <ModuleCard title="Qismən ödəniş və depozit" lines={["Müalicə üzrə mərhələli yığım", "Depozit balansı", "Qalıq borc avtomatik izlənir"]} />
-                <ModuleCard title="Borc və xatırlatma" lines={["Gecikmiş ödəniş siyahısı", "Xatırlatma üçün növbə", "Admin və super admin nəzarəti"]} />
-              </div>
+            {isAnyAdmin && (
               <div className="ld-form-grid">
                 <input
-                  inputMode="decimal"
-                  placeholder="Məbləğ, məsələn 120"
-                  value={cashForm.amount}
-                  onChange={(event) => setCashForm((prev) => ({ ...prev, amount: event.target.value }))}
+                  placeholder="Tapşırıq başlığı"
+                  value={taskForm.title}
+                  onChange={(event) =>
+                    setTaskForm((prev) => ({
+                      ...prev,
+                      title: event.target.value,
+                    }))
+                  }
                 />
                 <input
-                  placeholder="Pasiyent e-poçtu"
-                  value={cashForm.customerEmail}
-                  onChange={(event) => setCashForm((prev) => ({ ...prev, customerEmail: event.target.value }))}
+                  placeholder="Qısa açıqlama"
+                  value={taskForm.description}
+                  onChange={(event) =>
+                    setTaskForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
+                  }
                 />
+                <select
+                  value={taskForm.assigneeUserId}
+                  onChange={(event) =>
+                    setTaskForm((prev) => ({
+                      ...prev,
+                      assigneeUserId: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Məsul işçi seçin</option>
+                  {assignableUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.email} ({user.role})
+                    </option>
+                  ))}
+                </select>
                 <input
-                  placeholder="Təsvir, məsələn qismən ödəniş"
-                  value={cashForm.description}
-                  onChange={(event) => setCashForm((prev) => ({ ...prev, description: event.target.value }))}
+                  type="datetime-local"
+                  value={taskForm.dueDate}
+                  onChange={(event) =>
+                    setTaskForm((prev) => ({
+                      ...prev,
+                      dueDate: event.target.value,
+                    }))
+                  }
                 />
-                <button className="ld-primary" onClick={() => void initiateCashPayment()} disabled={loading}>
-                  {loading ? "Link yaradılır..." : "Ödəniş linki yarat"}
+                <select
+                  value={taskForm.priority}
+                  onChange={(event) =>
+                    setTaskForm((prev) => ({
+                      ...prev,
+                      priority: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="LOW">Aşağı</option>
+                  <option value="MEDIUM">Orta</option>
+                  <option value="HIGH">Yüksək</option>
+                </select>
+                <button
+                  className="ld-primary"
+                  onClick={() => void createTask()}
+                  disabled={loading}
+                >
+                  Tapşırıq yarat
                 </button>
               </div>
-              {paymentLink && (
-                <div className="ld-banner success" style={{ marginTop: 12 }}>
-                  Hazır ödəniş linki: <a href={paymentLink} target="_blank" rel="noreferrer">{paymentLink}</a>
+            )}
+
+            {tasks.length === 0 && <EmptyState text="Hələ tapşırıq yoxdur." />}
+            {tasks.map((task) => (
+              <div className="ld-simple-row" key={task.id}>
+                <b>{task.title}</b>
+                <span>{task.assignee.email}</span>
+                <span>{formatDate(task.dueDate)}</span>
+                <em
+                  className={
+                    task.isOverdue
+                      ? "wait"
+                      : task.status === "COMPLETED"
+                        ? "live"
+                        : ""
+                  }
+                >
+                  {taskStatusLabel(task.status, task.isOverdue)}
+                </em>
+                <div className="ld-task-actions">
+                  <button
+                    onClick={() =>
+                      void updateTaskStatus(task.id, "IN_PROGRESS")
+                    }
+                  >
+                    İcradadır
+                  </button>
+                  <button
+                    onClick={() => void updateTaskStatus(task.id, "COMPLETED")}
+                  >
+                    Tamamlandı
+                  </button>
+                  <button
+                    onClick={() => void updateTaskStatus(task.id, "CANCELLED")}
+                  >
+                    Ləğv et
+                  </button>
                 </div>
-              )}
-              <ModuleTable
-                title="Kassa axını (vizual)"
-                columns={["Pasiyent", "Əməliyyat", "Məbləğ", "Status"]}
-                rows={[
-                  ["Aysel Məmmədova", "Qismən ödəniş", "120 ₼", "Təsdiq"],
-                  ["Murad Həsənli", "Depozit", "300 ₼", "Təsdiq"],
-                  ["Leyla Rzayeva", "Borc", "90 ₼", "Gecikib"]
-                ]}
-              />
-            </section>
-          )}
-
-          {active === "finance" && (
-            <section className="ld-module-shell">
-              <ModuleHeader title="Maliyyə paneli" subtitle="Gəlir, xərc, maaş və dövr hesabatları" />
-              <div className="ld-module-grid">
-                <ModuleCard title="Gəlir paneli" lines={["Gündəlik dövriyyə", "Şöbə üzrə bölgü", "Trend qrafik sahəsi"]} />
-                <ModuleCard title="Xərc idarəsi" lines={["Kateqoriya üzrə xərclər", "Təchizatçı ödənişləri", "Dövri xərc şablonları"]} />
-                <ModuleCard title="Maaş paneli" lines={["Həkim faiz modeli", "Maaş hesablama draft", "Təsdiq mərhələsi"]} />
               </div>
-              <ModuleTable
-                title="Maliyyə icmalı (vizual)"
-                columns={["Kateqoriya", "Bu gün", "Bu ay", "Trend"]}
-                rows={[
-                  ["Gəlir", "2 840 ₼", "58 400 ₼", "↑"],
-                  ["Xərc", "760 ₼", "14 900 ₼", "→"],
-                  ["Maaş", "-", "19 200 ₼", "↑"]
+            ))}
+          </section>
+        )}
+
+        {active === "treatments" && (
+          <section className="ld-module-shell">
+            <ModuleHeader
+              title="Müalicə paneli"
+              subtitle="Mərhələ, xidmət, qiymətləndirmə və zəmanət axını"
+            />
+            <div className="ld-module-grid">
+              <ModuleCard
+                title="Müalicə planı"
+                lines={[
+                  "Pasiyent üçün mərhələli plan",
+                  "İcra statusu: planlandı / icrada / tamamlandı",
+                  "Həkim qeydləri və tarixçə",
                 ]}
               />
-            </section>
-          )}
+              <ModuleCard
+                title="Xidmət siyahısı"
+                lines={[
+                  "Klinika xidmət kataloqu",
+                  "Qiymət və müddət konfiqurasiyası",
+                  "Filial/şöbə üzrə fərqləndirmə",
+                ]}
+              />
+              <ModuleCard
+                title="Zəmanət və implant"
+                lines={[
+                  "Zəmanət kartı şablonu",
+                  "İmplant marka/seriya məlumatı",
+                  "Nəzarət vizit tarixçəsi",
+                ]}
+              />
+            </div>
+            <ModuleTable
+              title="Müalicə iş axını (vizual)"
+              columns={["Mərhələ", "Məsul", "Status", "Tarix"]}
+              rows={[
+                ["Diaqnostika", "Dr. Nigar", "Tamamlanıb", "20.06.2026"],
+                ["Plan təsdiqi", "Dr. Nigar", "İcradadır", "21.06.2026"],
+                ["Prosedur", "Tibb bacısı", "Gözləyir", "22.06.2026"],
+              ]}
+            />
+          </section>
+        )}
 
-          {active === "inventory" && (
-            <section className="ld-module-shell">
-              <ModuleHeader title="Anbar paneli" subtitle="Məhsul, təchizatçı, alış və minimum stok nəzarəti" />
-              <div className="ld-module-grid">
-                <ModuleCard title="Məhsul kartları" lines={["Kateqoriya və barkod", "Cari stok və minimum limit", "Saxlama yeri"]} />
-                <ModuleCard title="Təchizatçılar" lines={["Müqavilə və əlaqə məlumatı", "Qiymət müqayisəsi", "Tarixçə"]} />
-                <ModuleCard title="Stok xəbərdarlığı" lines={["Minimum stok triggeri", "Sifariş draftı", "Məsul şəxs bildirişi"]} />
+        {active === "cash" && (
+          <section className="ld-module-shell">
+            <ModuleHeader
+              title="Kassa paneli"
+              subtitle="Ödəniş, qismən ödəniş, depozit və borc izlənməsi"
+            />
+            <div className="ld-module-grid">
+              <ModuleCard
+                title="Ödənişlər"
+                lines={[
+                  "Nağd, kart və transfer axını",
+                  "Paymes linki ilə uzaq ödəniş",
+                  "Qəbz və əməliyyat izi",
+                ]}
+              />
+              <ModuleCard
+                title="Qismən ödəniş və depozit"
+                lines={[
+                  "Müalicə üzrə mərhələli yığım",
+                  "Depozit balansı",
+                  "Qalıq borc avtomatik izlənir",
+                ]}
+              />
+              <ModuleCard
+                title="Borc və xatırlatma"
+                lines={[
+                  "Gecikmiş ödəniş siyahısı",
+                  "Xatırlatma üçün növbə",
+                  "Admin və super admin nəzarəti",
+                ]}
+              />
+            </div>
+            <div className="ld-form-grid">
+              <input
+                inputMode="decimal"
+                placeholder="Məbləğ, məsələn 120"
+                value={cashForm.amount}
+                onChange={(event) =>
+                  setCashForm((prev) => ({
+                    ...prev,
+                    amount: event.target.value,
+                  }))
+                }
+              />
+              <input
+                placeholder="Pasiyent e-poçtu"
+                value={cashForm.customerEmail}
+                onChange={(event) =>
+                  setCashForm((prev) => ({
+                    ...prev,
+                    customerEmail: event.target.value,
+                  }))
+                }
+              />
+              <input
+                placeholder="Təsvir, məsələn qismən ödəniş"
+                value={cashForm.description}
+                onChange={(event) =>
+                  setCashForm((prev) => ({
+                    ...prev,
+                    description: event.target.value,
+                  }))
+                }
+              />
+              <button
+                className="ld-primary"
+                onClick={() => void initiateCashPayment()}
+                disabled={loading}
+              >
+                {loading ? "Link yaradılır..." : "Ödəniş linki yarat"}
+              </button>
+            </div>
+            {paymentLink && (
+              <div className="ld-banner success" style={{ marginTop: 12 }}>
+                Hazır ödəniş linki:{" "}
+                <a href={paymentLink} target="_blank" rel="noreferrer">
+                  {paymentLink}
+                </a>
               </div>
-              <ModuleTable
-                title="Anbar vəziyyəti (vizual)"
-                columns={["Məhsul", "Cari stok", "Min limit", "Vəziyyət"]}
-                rows={[
-                  ["Anesteziya ampula", "14", "20", "Aşağı"],
-                  ["İmplant seti", "36", "15", "Normal"],
-                  ["Maska", "110", "80", "Normal"]
+            )}
+            <ModuleTable
+              title="Kassa axını (vizual)"
+              columns={["Pasiyent", "Əməliyyat", "Məbləğ", "Status"]}
+              rows={[
+                ["Aysel Məmmədova", "Qismən ödəniş", "120 ₼", "Təsdiq"],
+                ["Murad Həsənli", "Depozit", "300 ₼", "Təsdiq"],
+                ["Leyla Rzayeva", "Borc", "90 ₼", "Gecikib"],
+              ]}
+            />
+          </section>
+        )}
+
+        {active === "finance" && (
+          <section className="ld-module-shell">
+            <ModuleHeader
+              title="Maliyyə paneli"
+              subtitle="Gəlir, xərc, maaş və dövr hesabatları"
+            />
+            <div className="ld-module-grid">
+              <ModuleCard
+                title="Gəlir paneli"
+                lines={[
+                  "Gündəlik dövriyyə",
+                  "Şöbə üzrə bölgü",
+                  "Trend qrafik sahəsi",
                 ]}
               />
-            </section>
-          )}
-
-          {active === "notifications" && (
-            <section className="ld-module-shell">
-              <ModuleHeader title="Bildiriş və xatırlatma" subtitle="SMS, WhatsApp, Email şablon və göndəriş monitorinqi" />
-              <div className="ld-module-grid">
-                <ModuleCard title="Şablon idarəsi" lines={["Randevu təsdiq şablonu", "Ləğv/xatırlatma şablonları", "Dil versiyaları"]} />
-                <ModuleCard title="Göndəriş monitorinqi" lines={["Uğurlu/ugursuz log", "Provider cavab kodları", "Təkrar göndərmə düyməsi"]} />
-                <ModuleCard title="Avtomatik triggerlər" lines={["Randevu öncəsi xatırlatma", "Ödəniş gecikməsi bildirişi", "Müalicə mərhələ bildirimi"]} />
-              </div>
-              <ModuleTable
-                title="Son bildirişlər (vizual)"
-                columns={["Kanal", "Mövzu", "Qəbul edən", "Status"]}
-                rows={[
-                  ["SMS", "Randevu xatırlatma", "+99450******", "Uğurlu"],
-                  ["WhatsApp", "Randevu təsdiq", "+99455******", "Uğurlu"],
-                  ["Email", "Ödəniş gecikməsi", "p***@mail.com", "Növbədə"]
+              <ModuleCard
+                title="Xərc idarəsi"
+                lines={[
+                  "Kateqoriya üzrə xərclər",
+                  "Təchizatçı ödənişləri",
+                  "Dövri xərc şablonları",
                 ]}
               />
-            </section>
-          )}
-
-          {active === "reports" && (
-            <section className="ld-module-shell">
-              <ModuleHeader title="Hesabatlar" subtitle="Statistika paneli və export mərhələləri (PDF / Excel)" />
-              <div className="ld-module-grid">
-                <ModuleCard title="Pasiyent statistikası" lines={["Yeni pasiyentlər", "Aktiv pasiyentlər", "Yaş qrupu bölgüsü"]} />
-                <ModuleCard title="Həkim və randevu" lines={["Qəbul sayı", "Tamamlanma faizi", "Boş slot analizi"]} />
-                <ModuleCard title="Export mərkəzi" lines={["PDF export paneli", "Excel export paneli", "Tarix aralığı filtrləri"]} />
-              </div>
-              <ModuleTable
-                title="Hesabat preview (vizual)"
-                columns={["Hesabat", "Dövr", "Format", "Əməliyyat"]}
-                rows={[
-                  ["Gündəlik maliyyə", "20.06.2026", "PDF", "Yarat"],
-                  ["Randevu statistikası", "İyun 2026", "Excel", "Yarat"],
-                  ["Pasiyent xülasəsi", "Q2 2026", "PDF", "Yarat"]
+              <ModuleCard
+                title="Maaş paneli"
+                lines={[
+                  "Həkim faiz modeli",
+                  "Maaş hesablama draft",
+                  "Təsdiq mərhələsi",
                 ]}
               />
-            </section>
-          )}
+            </div>
+            <ModuleTable
+              title="Maliyyə icmalı (vizual)"
+              columns={["Kateqoriya", "Bu gün", "Bu ay", "Trend"]}
+              rows={[
+                ["Gəlir", "2 840 ₼", "58 400 ₼", "↑"],
+                ["Xərc", "760 ₼", "14 900 ₼", "→"],
+                ["Maaş", "-", "19 200 ₼", "↑"],
+              ]}
+            />
+          </section>
+        )}
 
-          {active === "dashboard" && (
-            <>
+        {active === "inventory" && (
+          <section className="ld-module-shell">
+            <ModuleHeader
+              title="Anbar paneli"
+              subtitle="Məhsul, təchizatçı, alış və minimum stok nəzarəti"
+            />
+            <div className="ld-module-grid">
+              <ModuleCard
+                title="Məhsul kartları"
+                lines={[
+                  "Kateqoriya və barkod",
+                  "Cari stok və minimum limit",
+                  "Saxlama yeri",
+                ]}
+              />
+              <ModuleCard
+                title="Təchizatçılar"
+                lines={[
+                  "Müqavilə və əlaqə məlumatı",
+                  "Qiymət müqayisəsi",
+                  "Tarixçə",
+                ]}
+              />
+              <ModuleCard
+                title="Stok xəbərdarlığı"
+                lines={[
+                  "Minimum stok triggeri",
+                  "Sifariş draftı",
+                  "Məsul şəxs bildirişi",
+                ]}
+              />
+            </div>
+            <ModuleTable
+              title="Anbar vəziyyəti (vizual)"
+              columns={["Məhsul", "Cari stok", "Min limit", "Vəziyyət"]}
+              rows={[
+                ["Anesteziya ampula", "14", "20", "Aşağı"],
+                ["İmplant seti", "36", "15", "Normal"],
+                ["Maska", "110", "80", "Normal"],
+              ]}
+            />
+          </section>
+        )}
+
+        {active === "notifications" && (
+          <section className="ld-module-shell">
+            <ModuleHeader
+              title="Bildiriş və xatırlatma"
+              subtitle="SMS, WhatsApp, Email şablon və göndəriş monitorinqi"
+            />
+            <div className="ld-module-grid">
+              <ModuleCard
+                title="Şablon idarəsi"
+                lines={[
+                  "Randevu təsdiq şablonu",
+                  "Ləğv/xatırlatma şablonları",
+                  "Dil versiyaları",
+                ]}
+              />
+              <ModuleCard
+                title="Göndəriş monitorinqi"
+                lines={[
+                  "Uğurlu/ugursuz log",
+                  "Provider cavab kodları",
+                  "Təkrar göndərmə düyməsi",
+                ]}
+              />
+              <ModuleCard
+                title="Avtomatik triggerlər"
+                lines={[
+                  "Randevu öncəsi xatırlatma",
+                  "Ödəniş gecikməsi bildirişi",
+                  "Müalicə mərhələ bildirimi",
+                ]}
+              />
+            </div>
+            <ModuleTable
+              title="Son bildirişlər (vizual)"
+              columns={["Kanal", "Mövzu", "Qəbul edən", "Status"]}
+              rows={[
+                ["SMS", "Randevu xatırlatma", "+99450******", "Uğurlu"],
+                ["WhatsApp", "Randevu təsdiq", "+99455******", "Uğurlu"],
+                ["Email", "Ödəniş gecikməsi", "p***@mail.com", "Növbədə"],
+              ]}
+            />
+          </section>
+        )}
+
+        {active === "reports" && (
+          <section className="ld-module-shell">
+            <ModuleHeader
+              title="Hesabatlar"
+              subtitle="Statistika paneli və export mərhələləri (PDF / Excel)"
+            />
+            <div className="ld-module-grid">
+              <ModuleCard
+                title="Pasiyent statistikası"
+                lines={[
+                  "Yeni pasiyentlər",
+                  "Aktiv pasiyentlər",
+                  "Yaş qrupu bölgüsü",
+                ]}
+              />
+              <ModuleCard
+                title="Həkim və randevu"
+                lines={["Qəbul sayı", "Tamamlanma faizi", "Boş slot analizi"]}
+              />
+              <ModuleCard
+                title="Export mərkəzi"
+                lines={[
+                  "PDF export paneli",
+                  "Excel export paneli",
+                  "Tarix aralığı filtrləri",
+                ]}
+              />
+            </div>
+            <ModuleTable
+              title="Hesabat preview (vizual)"
+              columns={["Hesabat", "Dövr", "Format", "Əməliyyat"]}
+              rows={[
+                ["Gündəlik maliyyə", "20.06.2026", "PDF", "Yarat"],
+                ["Randevu statistikası", "İyun 2026", "Excel", "Yarat"],
+                ["Pasiyent xülasəsi", "Q2 2026", "PDF", "Yarat"],
+              ]}
+            />
+          </section>
+        )}
+
+        {active === "dashboard" && (
+          <>
             <section className="ld-grid">
               <article className="ld-card ld-schedule">
                 <CardHead title="Yaxınlaşan randevular" subtitle="İlk 8 qeyd" />
@@ -1125,10 +1524,15 @@ export function LovelyDentDashboard() {
                   <span>STATUS</span>
                   <span />
                 </div>
-                {appointments.length === 0 && <EmptyState text="Qarşıdakı 7 gün üçün randevu yoxdur." />}
+                {appointments.length === 0 && (
+                  <EmptyState text="Qarşıdakı 7 gün üçün randevu yoxdur." />
+                )}
                 {appointments.slice(0, 8).map((item) => (
                   <div className="ld-appt" key={item.id}>
-                    <b className="ld-time">{formatDate(item.startsAt).split(" ")[1] ?? formatDate(item.startsAt)}</b>
+                    <b className="ld-time">
+                      {formatDate(item.startsAt).split(" ")[1] ??
+                        formatDate(item.startsAt)}
+                    </b>
                     <div className="ld-person">
                       <i>{item.doctorName.slice(0, 2).toUpperCase()}</i>
                       <p>
@@ -1140,7 +1544,9 @@ export function LovelyDentDashboard() {
                       <b>{item.branch}</b>
                       <span>{formatDate(item.startsAt)}</span>
                     </p>
-                    <em className={statusBadgeClass(item.status)}>{appointmentStatusLabel(item.status)}</em>
+                    <em className={statusBadgeClass(item.status)}>
+                      {appointmentStatusLabel(item.status)}
+                    </em>
                     <button aria-label="actions">•••</button>
                   </div>
                 ))}
@@ -1149,7 +1555,11 @@ export function LovelyDentDashboard() {
               <aside className="ld-right-column">
                 <article className="ld-card ld-focus-card">
                   <CardHead
-                    title={isSuperAdmin ? "Super Admin prioritetləri" : "Admin prioritetləri"}
+                    title={
+                      isSuperAdmin
+                        ? "Super Admin prioritetləri"
+                        : "Admin prioritetləri"
+                    }
                     subtitle="Bu həftəlik icra fokusları"
                   />
                   <ul>
@@ -1160,7 +1570,10 @@ export function LovelyDentDashboard() {
                 </article>
 
                 <article className="ld-card ld-roadmap-card">
-                  <CardHead title="Panel qeydləri" subtitle="Bu həftə üçün operativ fokus" />
+                  <CardHead
+                    title="Panel qeydləri"
+                    subtitle="Bu həftə üçün operativ fokus"
+                  />
                   <ul>
                     <li>Randevu gecikmələrinin azaldılması</li>
                     <li>Qeydiyyat axınında məlumat tamlığı nəzarəti</li>
@@ -1169,163 +1582,260 @@ export function LovelyDentDashboard() {
                 </article>
               </aside>
             </section>
-            </>
-          )}
+          </>
+        )}
 
-          {active === "appointments" && (
-            <section className="ld-card ld-simple-list">
-              <CardHead title="Randevular" subtitle="Qarşıdakı 7 gün" />
-              {canManageBookings && (
-                <div className="ld-form-grid">
-                  <select
-                    value={appointmentForm.patientId}
-                    onChange={(event) => setAppointmentForm((prev) => ({ ...prev, patientId: event.target.value }))}
-                  >
-                    <option value="">Pasiyent seçin</option>
-                    {patients.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.fullName}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={appointmentForm.doctorId}
-                    onChange={(event) => setAppointmentForm((prev) => ({ ...prev, doctorId: event.target.value }))}
-                  >
-                    <option value="">Həkim seçin</option>
-                    {doctors.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.fullName}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="datetime-local"
-                    value={appointmentForm.startsAt}
-                    onChange={(event) => setAppointmentForm((prev) => ({ ...prev, startsAt: event.target.value }))}
-                  />
-                  <input
-                    type="datetime-local"
-                    value={appointmentForm.endsAt}
-                    onChange={(event) => setAppointmentForm((prev) => ({ ...prev, endsAt: event.target.value }))}
-                  />
-                  <button className="ld-primary" onClick={() => void createAppointment()} disabled={loading}>
-                    Randevu yarat
-                  </button>
-                </div>
-              )}
-              {appointments.length === 0 && <EmptyState text="Randevu siyahısı boşdur." />}
-              {appointments.map((item) => (
-                <div className="ld-simple-row" key={item.id}>
-                  <b>{formatDate(item.startsAt)}</b>
-                  <span>{item.doctorName}</span>
-                  <span>{item.branch}</span>
-                  <em className={statusBadgeClass(item.status)}>{appointmentStatusLabel(item.status)}</em>
-                </div>
-              ))}
-            </section>
-          )}
+        {active === "appointments" && (
+          <section className="ld-card ld-simple-list">
+            <CardHead title="Randevular" subtitle="Qarşıdakı 7 gün" />
+            {canManageBookings && (
+              <div className="ld-form-grid">
+                <select
+                  value={appointmentForm.patientId}
+                  onChange={(event) =>
+                    setAppointmentForm((prev) => ({
+                      ...prev,
+                      patientId: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Pasiyent seçin</option>
+                  {patients.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.fullName}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={appointmentForm.doctorId}
+                  onChange={(event) =>
+                    setAppointmentForm((prev) => ({
+                      ...prev,
+                      doctorId: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Həkim seçin</option>
+                  {doctors.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.fullName}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="datetime-local"
+                  value={appointmentForm.startsAt}
+                  onChange={(event) =>
+                    setAppointmentForm((prev) => ({
+                      ...prev,
+                      startsAt: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  type="datetime-local"
+                  value={appointmentForm.endsAt}
+                  onChange={(event) =>
+                    setAppointmentForm((prev) => ({
+                      ...prev,
+                      endsAt: event.target.value,
+                    }))
+                  }
+                />
+                <button
+                  className="ld-primary"
+                  onClick={() => void createAppointment()}
+                  disabled={loading}
+                >
+                  Randevu yarat
+                </button>
+              </div>
+            )}
+            {appointments.length === 0 && (
+              <EmptyState text="Randevu siyahısı boşdur." />
+            )}
+            {appointments.map((item) => (
+              <div className="ld-simple-row" key={item.id}>
+                <b>{formatDate(item.startsAt)}</b>
+                <span>{item.doctorName}</span>
+                <span>{item.branch}</span>
+                <em className={statusBadgeClass(item.status)}>
+                  {appointmentStatusLabel(item.status)}
+                </em>
+              </div>
+            ))}
+          </section>
+        )}
 
-          {active === "patients" && (
-            <section className="ld-card ld-simple-list">
-              <CardHead title="Pasiyent siyahısı" subtitle="İlk 100 qeyd" />
-              {canManageBookings && (
-                <div className="ld-form-grid">
-                  <input
-                    placeholder="Ad"
-                    value={patientForm.firstName}
-                    onChange={(event) => setPatientForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                  />
-                  <input
-                    placeholder="Soyad"
-                    value={patientForm.lastName}
-                    onChange={(event) => setPatientForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                  />
-                  <input
-                    placeholder="Şəxsiyyət nömrəsi"
-                    value={patientForm.identityNumber}
-                    onChange={(event) => setPatientForm((prev) => ({ ...prev, identityNumber: event.target.value }))}
-                  />
-                  <input
-                    placeholder="Telefon"
-                    value={patientForm.phone}
-                    onChange={(event) => setPatientForm((prev) => ({ ...prev, phone: event.target.value }))}
-                  />
-                  <input
-                    placeholder="E-posta"
-                    value={patientForm.email}
-                    onChange={(event) => setPatientForm((prev) => ({ ...prev, email: event.target.value }))}
-                  />
-                  <input
-                    type="password"
-                    placeholder="Şifrə"
-                    value={patientForm.password}
-                    onChange={(event) => setPatientForm((prev) => ({ ...prev, password: event.target.value }))}
-                  />
-                  <input
-                    type="date"
-                    value={patientForm.birthDate}
-                    onChange={(event) => setPatientForm((prev) => ({ ...prev, birthDate: event.target.value }))}
-                  />
-                  <select
-                    value={patientForm.gender}
-                    onChange={(event) => setPatientForm((prev) => ({ ...prev, gender: event.target.value }))}
-                  >
-                    <option value="FEMALE">Qadın</option>
-                    <option value="MALE">Kişi</option>
-                    <option value="OTHER">Digər</option>
-                  </select>
-                  <button className="ld-primary" onClick={() => void createPatient()} disabled={loading}>
-                    Pasiyent yarat
-                  </button>
-                </div>
-              )}
-              {patients.length === 0 && <EmptyState text="Pasiyent siyahısı boşdur." />}
-              {patients.map((item) => (
-                <div className="ld-simple-row" key={item.id}>
-                  <b>{item.fullName}</b>
-                  <span>{item.identityNumber}</span>
-                  <span>{item.phone}</span>
-                </div>
-              ))}
-            </section>
-          )}
+        {active === "patients" && (
+          <section className="ld-card ld-simple-list">
+            <CardHead title="Pasiyent siyahısı" subtitle="İlk 100 qeyd" />
+            {canManageBookings && (
+              <div className="ld-form-grid">
+                <input
+                  placeholder="Ad"
+                  value={patientForm.firstName}
+                  onChange={(event) =>
+                    setPatientForm((prev) => ({
+                      ...prev,
+                      firstName: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  placeholder="Soyad"
+                  value={patientForm.lastName}
+                  onChange={(event) =>
+                    setPatientForm((prev) => ({
+                      ...prev,
+                      lastName: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  placeholder="Şəxsiyyət nömrəsi"
+                  value={patientForm.identityNumber}
+                  onChange={(event) =>
+                    setPatientForm((prev) => ({
+                      ...prev,
+                      identityNumber: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  placeholder="Telefon"
+                  value={patientForm.phone}
+                  onChange={(event) =>
+                    setPatientForm((prev) => ({
+                      ...prev,
+                      phone: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  placeholder="E-posta"
+                  value={patientForm.email}
+                  onChange={(event) =>
+                    setPatientForm((prev) => ({
+                      ...prev,
+                      email: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  type="password"
+                  placeholder="Şifrə"
+                  value={patientForm.password}
+                  onChange={(event) =>
+                    setPatientForm((prev) => ({
+                      ...prev,
+                      password: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  type="date"
+                  value={patientForm.birthDate}
+                  onChange={(event) =>
+                    setPatientForm((prev) => ({
+                      ...prev,
+                      birthDate: event.target.value,
+                    }))
+                  }
+                />
+                <select
+                  value={patientForm.gender}
+                  onChange={(event) =>
+                    setPatientForm((prev) => ({
+                      ...prev,
+                      gender: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="FEMALE">Qadın</option>
+                  <option value="MALE">Kişi</option>
+                  <option value="OTHER">Digər</option>
+                </select>
+                <button
+                  className="ld-primary"
+                  onClick={() => void createPatient()}
+                  disabled={loading}
+                >
+                  Pasiyent yarat
+                </button>
+              </div>
+            )}
+            {patients.length === 0 && (
+              <EmptyState text="Pasiyent siyahısı boşdur." />
+            )}
+            {patients.map((item) => (
+              <div className="ld-simple-row" key={item.id}>
+                <b>{item.fullName}</b>
+                <span>{item.identityNumber}</span>
+                <span>{item.phone}</span>
+              </div>
+            ))}
+          </section>
+        )}
 
-          {active === "doctors" && (
-            <section className="ld-card ld-simple-list">
-              <CardHead title="Həkim siyahısı" subtitle="Şöbə və otaq məlumatı" />
-              {doctors.length === 0 && <EmptyState text="Həkim siyahısı boşdur." />}
-              {doctors.map((item) => (
-                <div className="ld-simple-row" key={item.id}>
-                  <b>{item.fullName}</b>
-                  <span>{item.branch}</span>
-                  <span>{item.roomNumber || "-"}</span>
-                  <em className={item.active ? "live" : "wait"}>{item.active ? "AKTİV" : "PASSİV"}</em>
-                </div>
-              ))}
-            </section>
-          )}
+        {active === "doctors" && (
+          <section className="ld-card ld-simple-list">
+            <CardHead title="Həkim siyahısı" subtitle="Şöbə və otaq məlumatı" />
+            {doctors.length === 0 && (
+              <EmptyState text="Həkim siyahısı boşdur." />
+            )}
+            {doctors.map((item) => (
+              <div className="ld-simple-row" key={item.id}>
+                <b>{item.fullName}</b>
+                <span>{item.branch}</span>
+                <span>{item.roomNumber || "-"}</span>
+                <em className={item.active ? "live" : "wait"}>
+                  {item.active ? "AKTİV" : "PASSİV"}
+                </em>
+              </div>
+            ))}
+          </section>
+        )}
 
-          {active === "users" && isAnyAdmin && (
-            <section className="ld-card ld-simple-list">
-              <CardHead title="Klinika istifadəçiləri" subtitle="Admin + çağrı mərkəzi + tibb bacısı" />
-              {[...staffUsers, ...nurses].length === 0 && <EmptyState text="İstifadəçi siyahısı boşdur." />}
-              {[...staffUsers, ...nurses].map((item) => (
-                <div className="ld-simple-row" key={item.id}>
-                  <b>{item.email}</b>
-                  <span>{item.role}</span>
-                  <span>{formatDate(item.createdAt)}</span>
-                  <em className={item.active ? "live" : "wait"}>{item.active ? "AKTİV" : "PASSİV"}</em>
-                </div>
-              ))}
-            </section>
-          )}
+        {active === "users" && isAnyAdmin && (
+          <section className="ld-card ld-simple-list">
+            <CardHead
+              title="Klinika istifadəçiləri"
+              subtitle="Admin + çağrı mərkəzi + tibb bacısı"
+            />
+            {[...staffUsers, ...nurses].length === 0 && (
+              <EmptyState text="İstifadəçi siyahısı boşdur." />
+            )}
+            {[...staffUsers, ...nurses].map((item) => (
+              <div className="ld-simple-row" key={item.id}>
+                <b>{item.email}</b>
+                <span>{item.role}</span>
+                <span>{formatDate(item.createdAt)}</span>
+                <em className={item.active ? "live" : "wait"}>
+                  {item.active ? "AKTİV" : "PASSİV"}
+                </em>
+              </div>
+            ))}
+          </section>
+        )}
       </section>
     </main>
   );
 }
 
-function Stat({ label, value, detail, icon, tone }: { label: string; value: string; detail: string; icon: string; tone: string }) {
+function Stat({
+  label,
+  value,
+  detail,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: string;
+  tone: string;
+}) {
   return (
     <article>
       <span>{label}</span>
@@ -1351,7 +1861,13 @@ function EmptyState({ text }: { text: string }) {
   return <div className="ld-empty-state">{text}</div>;
 }
 
-function ModuleHeader({ title, subtitle }: { title: string; subtitle: string }) {
+function ModuleHeader({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
   return (
     <div className="ld-module-head">
       <h2>{title}</h2>
@@ -1373,7 +1889,15 @@ function ModuleCard({ title, lines }: { title: string; lines: string[] }) {
   );
 }
 
-function ModuleTable({ title, columns, rows }: { title: string; columns: string[]; rows: string[][] }) {
+function ModuleTable({
+  title,
+  columns,
+  rows,
+}: {
+  title: string;
+  columns: string[];
+  rows: string[][];
+}) {
   return (
     <section className="ld-module-table">
       <h3>{title}</h3>

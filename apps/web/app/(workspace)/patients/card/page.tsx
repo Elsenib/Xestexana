@@ -4,33 +4,535 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiRequest } from "../../../../lib/lovelydent-api";
 
-type Anamnesis = { version:number; allergies:string[]; chronicConditions:string[]; infectiousDiseases:string[]; regularMedications:string[]; pregnancyOrRisk?:string; pastSurgeries?:string; medicalNotes?:string; criticalAlert?:string; confirmedByPatient:boolean; createdAt:string };
-type ToothEntry = { tooth:string; surfaces:string[]; condition:string; phase:"EXISTING"|"PLANNED" };
-type Summary = { id:string; firstName:string; lastName:string; identityNumber:string; phone:string; gender:string; birthDate:string; bloodType?:string; anamnesisVersions:Anamnesis[]; odontogramSnapshots:Array<{id:string;entries:ToothEntry[];createdAt:string}>; clinicalEncounters:Array<{id:string;status:string;diagnosis?:string;createdAt:string;doctor:{email:string}}> };
-const upper=["18","17","16","15","14","13","12","11","21","22","23","24","25","26","27","28"];
-const lower=["48","47","46","45","44","43","42","41","31","32","33","34","35","36","37","38"];
-const conditions=["HEALTHY","CARIES","FILLING","ROOT_CANAL","CROWN","IMPLANT","EXTRACTED","MISSING"];
-const labels:Record<string,string>={HEALTHY:"Sağlam",CARIES:"Kariyes",FILLING:"Plomb",ROOT_CANAL:"Kanal",CROWN:"Kron",IMPLANT:"İmplant",EXTRACTED:"Çəkilib",MISSING:"Çatışmır"};
+type Anamnesis = {
+  version: number;
+  allergies: string[];
+  chronicConditions: string[];
+  infectiousDiseases: string[];
+  regularMedications: string[];
+  pregnancyOrRisk?: string;
+  pastSurgeries?: string;
+  medicalNotes?: string;
+  criticalAlert?: string;
+  confirmedByPatient: boolean;
+  createdAt: string;
+};
+type ToothEntry = {
+  tooth: string;
+  surfaces: string[];
+  condition: string;
+  phase: "EXISTING" | "PLANNED";
+};
+type Summary = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  identityNumber: string;
+  phone: string;
+  gender: string;
+  birthDate: string;
+  bloodType?: string;
+  anamnesisVersions: Anamnesis[];
+  odontogramSnapshots: Array<{
+    id: string;
+    entries: ToothEntry[];
+    createdAt: string;
+  }>;
+  clinicalEncounters: Array<{
+    id: string;
+    status: string;
+    diagnosis?: string;
+    createdAt: string;
+    doctor: { email: string };
+  }>;
+};
+const upper = [
+  "18",
+  "17",
+  "16",
+  "15",
+  "14",
+  "13",
+  "12",
+  "11",
+  "21",
+  "22",
+  "23",
+  "24",
+  "25",
+  "26",
+  "27",
+  "28",
+];
+const lower = [
+  "48",
+  "47",
+  "46",
+  "45",
+  "44",
+  "43",
+  "42",
+  "41",
+  "31",
+  "32",
+  "33",
+  "34",
+  "35",
+  "36",
+  "37",
+  "38",
+];
+const conditions = [
+  "HEALTHY",
+  "CARIES",
+  "FILLING",
+  "ROOT_CANAL",
+  "CROWN",
+  "IMPLANT",
+  "EXTRACTED",
+  "MISSING",
+];
+const labels: Record<string, string> = {
+  HEALTHY: "Sağlam",
+  CARIES: "Kariyes",
+  FILLING: "Plomb",
+  ROOT_CANAL: "Kanal",
+  CROWN: "Kron",
+  IMPLANT: "İmplant",
+  EXTRACTED: "Çəkilib",
+  MISSING: "Çatışmır",
+};
 
-function ClinicalCard(){
-  const searchParams=useSearchParams(); const id=searchParams?.get("id")??null; const [data,setData]=useState<Summary|null>(null); const [tab,setTab]=useState("summary"); const [error,setError]=useState("");
-  const [anamnesis,setAnamnesis]=useState({allergies:"",chronicConditions:"",infectiousDiseases:"",regularMedications:"",pregnancyOrRisk:"",pastSurgeries:"",medicalNotes:"",criticalAlert:"",confirmedByPatient:false});
-  const [teeth,setTeeth]=useState<Record<string,ToothEntry>>({}); const [selected,setSelected]=useState("11"); const [phase,setPhase]=useState<"EXISTING"|"PLANNED">("EXISTING");
-  async function load(){if(!id)return;try{const value=await apiRequest<Summary>(`/patients/${id}/clinical-summary`);setData(value);const latest=value.anamnesisVersions[0];if(latest)setAnamnesis({allergies:latest.allergies.join(", "),chronicConditions:latest.chronicConditions.join(", "),infectiousDiseases:latest.infectiousDiseases.join(", "),regularMedications:latest.regularMedications.join(", "),pregnancyOrRisk:latest.pregnancyOrRisk??"",pastSurgeries:latest.pastSurgeries??"",medicalNotes:latest.medicalNotes??"",criticalAlert:latest.criticalAlert??"",confirmedByPatient:latest.confirmedByPatient});const latestChart=value.odontogramSnapshots[0];if(latestChart)setTeeth(Object.fromEntries(latestChart.entries.map(x=>[x.tooth,x])))}catch(e){setError(e instanceof Error?e.message:"Klinik kart yüklənmədi.")}}
-  useEffect(()=>{void load()},[id]);
-  const list=(value:string)=>value.split(",").map(x=>x.trim()).filter(Boolean);
-  async function saveAnamnesis(e:FormEvent){e.preventDefault();if(!id)return;try{await apiRequest(`/patients/${id}/anamnesis`,{method:"POST",body:JSON.stringify({...anamnesis,allergies:list(anamnesis.allergies),chronicConditions:list(anamnesis.chronicConditions),infectiousDiseases:list(anamnesis.infectiousDiseases),regularMedications:list(anamnesis.regularMedications)})});await load()}catch(c){setError(c instanceof Error?c.message:"Anamnez saxlanmadı.")}}
-  function setCondition(condition:string){setTeeth({...teeth,[selected]:{tooth:selected,surfaces:["WHOLE"],condition,phase}})}
-  async function saveChart(){if(!id)return;try{await apiRequest(`/patients/${id}/odontograms`,{method:"POST",body:JSON.stringify({numberingSystem:"FDI",dentition:"PERMANENT",entries:Object.values(teeth)})});await load()}catch(c){setError(c instanceof Error?c.message:"Odontogram saxlanmadı.")}}
-  if(!id)return <section className="ws-coming"><h1>Pasiyent seçilməyib</h1><a href="/patients">Pasiyentlərə qayıt</a></section>;
-  if(!data)return <div className="ws-empty"><b>{error||"Klinik kart yüklənir..."}</b></div>;
-  const latest=data.anamnesisVersions[0]; const age=Math.floor((Date.now()-new Date(data.birthDate).getTime())/31557600000);
-  return <><section className="pc-head"><a href="/patients">← Pasiyentlər</a><div className="pc-identity"><i>{data.firstName[0]}{data.lastName[0]}</i><div><p className="ws-eyebrow">Pasiyent #{data.identityNumber}</p><h1>{data.firstName} {data.lastName}</h1><span>{age} yaş · {data.phone} · {data.bloodType||"Qan qrupu qeyd edilməyib"}</span></div></div>{latest?.criticalAlert&&<div className="pc-critical"><b>KRİTİK XƏBƏRDARLIQ</b><span>{latest.criticalAlert}</span></div>}</section>
-  <nav className="pc-tabs">{[["summary","Ümumi baxış"],["anamnesis","Anamnez"],["odontogram","Odontogram"],["encounters","Klinik qəbullar"]].map(x=><button className={tab===x[0]?"active":""} onClick={()=>setTab(x[0])} key={x[0]}>{x[1]}</button>)}</nav>{error&&<div className="ws-alert ws-alert--danger">{error}</div>}
-  {tab==="summary"&&<section className="pc-grid"><article className="ws-panel pc-section"><p className="ws-eyebrow">Tibbi təhlükəsizlik</p><h2>Anamnez xülasəsi</h2><dl><div><dt>Allergiyalar</dt><dd>{latest?.allergies.join(", ")||"Qeyd yoxdur"}</dd></div><div><dt>Xroniki xəstəliklər</dt><dd>{latest?.chronicConditions.join(", ")||"Qeyd yoxdur"}</dd></div><div><dt>Daimi dərmanlar</dt><dd>{latest?.regularMedications.join(", ")||"Qeyd yoxdur"}</dd></div></dl><button className="ws-button" onClick={()=>setTab("anamnesis")}>Anamnezi yenilə</button></article><article className="ws-panel pc-section"><p className="ws-eyebrow">Tarixçə</p><h2>Son klinik qəbullar</h2>{data.clinicalEncounters.length?data.clinicalEncounters.slice(0,5).map(x=><div className="pc-history" key={x.id}><i/><div><b>{x.diagnosis||"Diaqnoz daxil edilməyib"}</b><span>{new Date(x.createdAt).toLocaleDateString("az-AZ")} · {x.doctor.email}</span></div><em>{x.status}</em></div>):<div className="ws-empty"><span>Klinik qəbul yoxdur.</span></div>}</article></section>}
-  {tab==="anamnesis"&&<form className="ws-panel pc-form" onSubmit={saveAnamnesis}><header><div><p className="ws-eyebrow">Versiyalı tibbi məlumat</p><h2>Anamnez</h2></div><span>{latest?`Versiya ${latest.version} · ${new Date(latest.createdAt).toLocaleDateString("az-AZ")}`:"İlk qeyd"}</span></header><div className="ws-form-grid"><label>Allergiyalar<input value={anamnesis.allergies} onChange={e=>setAnamnesis({...anamnesis,allergies:e.target.value})} placeholder="Vergüllə ayırın"/></label><label>Xroniki xəstəliklər<input value={anamnesis.chronicConditions} onChange={e=>setAnamnesis({...anamnesis,chronicConditions:e.target.value})}/></label><label>Yoluxucu xəstəliklər<input value={anamnesis.infectiousDiseases} onChange={e=>setAnamnesis({...anamnesis,infectiousDiseases:e.target.value})}/></label><label>Daimi dərmanlar<input value={anamnesis.regularMedications} onChange={e=>setAnamnesis({...anamnesis,regularMedications:e.target.value})}/></label><label className="ws-form-wide">Kritik xəbərdarlıq<input value={anamnesis.criticalAlert} onChange={e=>setAnamnesis({...anamnesis,criticalAlert:e.target.value})}/></label><label>Hamiləlik və digər risklər<textarea value={anamnesis.pregnancyOrRisk} onChange={e=>setAnamnesis({...anamnesis,pregnancyOrRisk:e.target.value})}/></label><label>Keçmiş əməliyyatlar<textarea value={anamnesis.pastSurgeries} onChange={e=>setAnamnesis({...anamnesis,pastSurgeries:e.target.value})}/></label><label className="ws-form-wide">Digər tibbi qeydlər<textarea value={anamnesis.medicalNotes} onChange={e=>setAnamnesis({...anamnesis,medicalNotes:e.target.value})}/></label><label className="pc-check ws-form-wide"><input type="checkbox" checked={anamnesis.confirmedByPatient} onChange={e=>setAnamnesis({...anamnesis,confirmedByPatient:e.target.checked})}/> Məlumat pasiyent tərəfindən təsdiqlənib</label><footer className="ws-form-wide"><button className="ws-button ws-button--primary">Yeni versiyanı saxla</button></footer></div></form>}
-  {tab==="odontogram"&&<section className="ws-panel pc-odonto"><header><div><p className="ws-eyebrow">FDI · Daimi dişlər</p><h2>Odontogram</h2></div><button className="ws-button ws-button--primary" onClick={saveChart}>Snapshot saxla</button></header><div className="pc-phase"><button className={phase==="EXISTING"?"active":""} onClick={()=>setPhase("EXISTING")}>Mövcud vəziyyət</button><button className={phase==="PLANNED"?"active planned":""} onClick={()=>setPhase("PLANNED")}>Planlaşdırılan</button></div><div className="pc-jaw">{[upper,lower].map((jaw,i)=><div className="pc-teeth" key={i}>{jaw.map(tooth=><button title={labels[teeth[tooth]?.condition]||"Sağlam"} className={`${selected===tooth?"selected":""} ${teeth[tooth]?.phase==="PLANNED"?"planned":""} ${teeth[tooth]?.condition&&teeth[tooth].condition!=="HEALTHY"?"marked":""}`} onClick={()=>setSelected(tooth)} key={tooth}><span>♢</span><b>{tooth}</b></button>)}</div>)}</div><aside className="pc-condition"><div><small>SEÇİLMİŞ DİŞ</small><strong>{selected}</strong></div><div>{conditions.map(c=><button className={teeth[selected]?.condition===c?"active":""} onClick={()=>setCondition(c)} key={c}>{labels[c]}</button>)}</div></aside><p className="pc-legend"><i/> Mövcud vəziyyət <i/> Planlaşdırılan müalicə · Hər saxlamada tarixçədə yeni snapshot yaranır.</p></section>}
-  {tab==="encounters"&&<section className="ws-panel pc-section"><p className="ws-eyebrow">Dəyişməz klinik tarixçə</p><h2>Klinik qəbullar</h2>{data.clinicalEncounters.map(x=><div className="pc-history" key={x.id}><i/><div><b>{x.diagnosis||"Qaralama klinik qeyd"}</b><span>{new Date(x.createdAt).toLocaleString("az-AZ")} · {x.doctor.email}</span></div><em>{x.status}</em></div>)}</section>}</>;
+function ClinicalCard() {
+  const searchParams = useSearchParams();
+  const id = searchParams?.get("id") ?? null;
+  const [data, setData] = useState<Summary | null>(null);
+  const [tab, setTab] = useState("summary");
+  const [error, setError] = useState("");
+  const [anamnesis, setAnamnesis] = useState({
+    allergies: "",
+    chronicConditions: "",
+    infectiousDiseases: "",
+    regularMedications: "",
+    pregnancyOrRisk: "",
+    pastSurgeries: "",
+    medicalNotes: "",
+    criticalAlert: "",
+    confirmedByPatient: false,
+  });
+  const [teeth, setTeeth] = useState<Record<string, ToothEntry>>({});
+  const [selected, setSelected] = useState("11");
+  const [phase, setPhase] = useState<"EXISTING" | "PLANNED">("EXISTING");
+  async function load() {
+    if (!id) return;
+    try {
+      const value = await apiRequest<Summary>(
+        `/patients/${id}/clinical-summary`,
+      );
+      setData(value);
+      const latest = value.anamnesisVersions[0];
+      if (latest)
+        setAnamnesis({
+          allergies: latest.allergies.join(", "),
+          chronicConditions: latest.chronicConditions.join(", "),
+          infectiousDiseases: latest.infectiousDiseases.join(", "),
+          regularMedications: latest.regularMedications.join(", "),
+          pregnancyOrRisk: latest.pregnancyOrRisk ?? "",
+          pastSurgeries: latest.pastSurgeries ?? "",
+          medicalNotes: latest.medicalNotes ?? "",
+          criticalAlert: latest.criticalAlert ?? "",
+          confirmedByPatient: latest.confirmedByPatient,
+        });
+      const latestChart = value.odontogramSnapshots[0];
+      if (latestChart)
+        setTeeth(
+          Object.fromEntries(latestChart.entries.map((x) => [x.tooth, x])),
+        );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Klinik kart yüklənmədi.");
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, [id]);
+  const list = (value: string) =>
+    value
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  async function saveAnamnesis(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      await apiRequest(`/patients/${id}/anamnesis`, {
+        method: "POST",
+        body: JSON.stringify({
+          ...anamnesis,
+          allergies: list(anamnesis.allergies),
+          chronicConditions: list(anamnesis.chronicConditions),
+          infectiousDiseases: list(anamnesis.infectiousDiseases),
+          regularMedications: list(anamnesis.regularMedications),
+        }),
+      });
+      await load();
+    } catch (c) {
+      setError(c instanceof Error ? c.message : "Anamnez saxlanmadı.");
+    }
+  }
+  function setCondition(condition: string) {
+    setTeeth({
+      ...teeth,
+      [selected]: { tooth: selected, surfaces: ["WHOLE"], condition, phase },
+    });
+  }
+  async function saveChart() {
+    if (!id) return;
+    try {
+      await apiRequest(`/patients/${id}/odontograms`, {
+        method: "POST",
+        body: JSON.stringify({
+          numberingSystem: "FDI",
+          dentition: "PERMANENT",
+          entries: Object.values(teeth),
+        }),
+      });
+      await load();
+    } catch (c) {
+      setError(c instanceof Error ? c.message : "Odontogram saxlanmadı.");
+    }
+  }
+  if (!id)
+    return (
+      <section className="ws-coming">
+        <h1>Pasiyent seçilməyib</h1>
+        <a href="/patients">Pasiyentlərə qayıt</a>
+      </section>
+    );
+  if (!data)
+    return (
+      <div className="ws-empty">
+        <b>{error || "Klinik kart yüklənir..."}</b>
+      </div>
+    );
+  const latest = data.anamnesisVersions[0];
+  const age = Math.floor(
+    (Date.now() - new Date(data.birthDate).getTime()) / 31557600000,
+  );
+  return (
+    <>
+      <section className="pc-head">
+        <a href="/patients">← Pasiyentlər</a>
+        <div className="pc-identity">
+          <i>
+            {data.firstName[0]}
+            {data.lastName[0]}
+          </i>
+          <div>
+            <p className="ws-eyebrow">Pasiyent #{data.identityNumber}</p>
+            <h1>
+              {data.firstName} {data.lastName}
+            </h1>
+            <span>
+              {age} yaş · {data.phone} ·{" "}
+              {data.bloodType || "Qan qrupu qeyd edilməyib"}
+            </span>
+          </div>
+        </div>
+        {latest?.criticalAlert && (
+          <div className="pc-critical">
+            <b>KRİTİK XƏBƏRDARLIQ</b>
+            <span>{latest.criticalAlert}</span>
+          </div>
+        )}
+      </section>
+      <nav className="pc-tabs">
+        {[
+          ["summary", "Ümumi baxış"],
+          ["anamnesis", "Anamnez"],
+          ["odontogram", "Odontogram"],
+          ["encounters", "Klinik qəbullar"],
+        ].map((x) => (
+          <button
+            className={tab === x[0] ? "active" : ""}
+            onClick={() => setTab(x[0])}
+            key={x[0]}
+          >
+            {x[1]}
+          </button>
+        ))}
+      </nav>
+      {error && <div className="ws-alert ws-alert--danger">{error}</div>}
+      {tab === "summary" && (
+        <section className="pc-grid">
+          <article className="ws-panel pc-section">
+            <p className="ws-eyebrow">Tibbi təhlükəsizlik</p>
+            <h2>Anamnez xülasəsi</h2>
+            <dl>
+              <div>
+                <dt>Allergiyalar</dt>
+                <dd>{latest?.allergies.join(", ") || "Qeyd yoxdur"}</dd>
+              </div>
+              <div>
+                <dt>Xroniki xəstəliklər</dt>
+                <dd>{latest?.chronicConditions.join(", ") || "Qeyd yoxdur"}</dd>
+              </div>
+              <div>
+                <dt>Daimi dərmanlar</dt>
+                <dd>
+                  {latest?.regularMedications.join(", ") || "Qeyd yoxdur"}
+                </dd>
+              </div>
+            </dl>
+            <button className="ws-button" onClick={() => setTab("anamnesis")}>
+              Anamnezi yenilə
+            </button>
+          </article>
+          <article className="ws-panel pc-section">
+            <p className="ws-eyebrow">Tarixçə</p>
+            <h2>Son klinik qəbullar</h2>
+            {data.clinicalEncounters.length ? (
+              data.clinicalEncounters.slice(0, 5).map((x) => (
+                <div className="pc-history" key={x.id}>
+                  <i />
+                  <div>
+                    <b>{x.diagnosis || "Diaqnoz daxil edilməyib"}</b>
+                    <span>
+                      {new Date(x.createdAt).toLocaleDateString("az-AZ")} ·{" "}
+                      {x.doctor.email}
+                    </span>
+                  </div>
+                  <em>{x.status}</em>
+                </div>
+              ))
+            ) : (
+              <div className="ws-empty">
+                <span>Klinik qəbul yoxdur.</span>
+              </div>
+            )}
+          </article>
+        </section>
+      )}
+      {tab === "anamnesis" && (
+        <form className="ws-panel pc-form" onSubmit={saveAnamnesis}>
+          <header>
+            <div>
+              <p className="ws-eyebrow">Versiyalı tibbi məlumat</p>
+              <h2>Anamnez</h2>
+            </div>
+            <span>
+              {latest
+                ? `Versiya ${latest.version} · ${new Date(latest.createdAt).toLocaleDateString("az-AZ")}`
+                : "İlk qeyd"}
+            </span>
+          </header>
+          <div className="ws-form-grid">
+            <label>
+              Allergiyalar
+              <input
+                value={anamnesis.allergies}
+                onChange={(e) =>
+                  setAnamnesis({ ...anamnesis, allergies: e.target.value })
+                }
+                placeholder="Vergüllə ayırın"
+              />
+            </label>
+            <label>
+              Xroniki xəstəliklər
+              <input
+                value={anamnesis.chronicConditions}
+                onChange={(e) =>
+                  setAnamnesis({
+                    ...anamnesis,
+                    chronicConditions: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Yoluxucu xəstəliklər
+              <input
+                value={anamnesis.infectiousDiseases}
+                onChange={(e) =>
+                  setAnamnesis({
+                    ...anamnesis,
+                    infectiousDiseases: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Daimi dərmanlar
+              <input
+                value={anamnesis.regularMedications}
+                onChange={(e) =>
+                  setAnamnesis({
+                    ...anamnesis,
+                    regularMedications: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label className="ws-form-wide">
+              Kritik xəbərdarlıq
+              <input
+                value={anamnesis.criticalAlert}
+                onChange={(e) =>
+                  setAnamnesis({ ...anamnesis, criticalAlert: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              Hamiləlik və digər risklər
+              <textarea
+                value={anamnesis.pregnancyOrRisk}
+                onChange={(e) =>
+                  setAnamnesis({
+                    ...anamnesis,
+                    pregnancyOrRisk: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Keçmiş əməliyyatlar
+              <textarea
+                value={anamnesis.pastSurgeries}
+                onChange={(e) =>
+                  setAnamnesis({ ...anamnesis, pastSurgeries: e.target.value })
+                }
+              />
+            </label>
+            <label className="ws-form-wide">
+              Digər tibbi qeydlər
+              <textarea
+                value={anamnesis.medicalNotes}
+                onChange={(e) =>
+                  setAnamnesis({ ...anamnesis, medicalNotes: e.target.value })
+                }
+              />
+            </label>
+            <label className="pc-check ws-form-wide">
+              <input
+                type="checkbox"
+                checked={anamnesis.confirmedByPatient}
+                onChange={(e) =>
+                  setAnamnesis({
+                    ...anamnesis,
+                    confirmedByPatient: e.target.checked,
+                  })
+                }
+              />{" "}
+              Məlumat pasiyent tərəfindən təsdiqlənib
+            </label>
+            <footer className="ws-form-wide">
+              <button className="ws-button ws-button--primary">
+                Yeni versiyanı saxla
+              </button>
+            </footer>
+          </div>
+        </form>
+      )}
+      {tab === "odontogram" && (
+        <section className="ws-panel pc-odonto">
+          <header>
+            <div>
+              <p className="ws-eyebrow">FDI · Daimi dişlər</p>
+              <h2>Odontogram</h2>
+            </div>
+            <button
+              className="ws-button ws-button--primary"
+              onClick={saveChart}
+            >
+              Snapshot saxla
+            </button>
+          </header>
+          <div className="pc-phase">
+            <button
+              className={phase === "EXISTING" ? "active" : ""}
+              onClick={() => setPhase("EXISTING")}
+            >
+              Mövcud vəziyyət
+            </button>
+            <button
+              className={phase === "PLANNED" ? "active planned" : ""}
+              onClick={() => setPhase("PLANNED")}
+            >
+              Planlaşdırılan
+            </button>
+          </div>
+          <div className="pc-jaw">
+            {[upper, lower].map((jaw, i) => (
+              <div className="pc-teeth" key={i}>
+                {jaw.map((tooth) => (
+                  <button
+                    title={labels[teeth[tooth]?.condition] || "Sağlam"}
+                    className={`${selected === tooth ? "selected" : ""} ${teeth[tooth]?.phase === "PLANNED" ? "planned" : ""} ${teeth[tooth]?.condition && teeth[tooth].condition !== "HEALTHY" ? "marked" : ""}`}
+                    onClick={() => setSelected(tooth)}
+                    key={tooth}
+                  >
+                    <span>♢</span>
+                    <b>{tooth}</b>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          <aside className="pc-condition">
+            <div>
+              <small>SEÇİLMİŞ DİŞ</small>
+              <strong>{selected}</strong>
+            </div>
+            <div>
+              {conditions.map((c) => (
+                <button
+                  className={teeth[selected]?.condition === c ? "active" : ""}
+                  onClick={() => setCondition(c)}
+                  key={c}
+                >
+                  {labels[c]}
+                </button>
+              ))}
+            </div>
+          </aside>
+          <p className="pc-legend">
+            <i /> Mövcud vəziyyət <i /> Planlaşdırılan müalicə · Hər saxlamada
+            tarixçədə yeni snapshot yaranır.
+          </p>
+        </section>
+      )}
+      {tab === "encounters" && (
+        <section className="ws-panel pc-section">
+          <p className="ws-eyebrow">Dəyişməz klinik tarixçə</p>
+          <h2>Klinik qəbullar</h2>
+          {data.clinicalEncounters.map((x) => (
+            <div className="pc-history" key={x.id}>
+              <i />
+              <div>
+                <b>{x.diagnosis || "Qaralama klinik qeyd"}</b>
+                <span>
+                  {new Date(x.createdAt).toLocaleString("az-AZ")} ·{" "}
+                  {x.doctor.email}
+                </span>
+              </div>
+              <em>{x.status}</em>
+            </div>
+          ))}
+        </section>
+      )}
+    </>
+  );
 }
 
-export default function PatientCardPage(){return <Suspense fallback={<div className="ws-empty"><b>Klinik kart yüklənir...</b></div>}><ClinicalCard/></Suspense>}
+export default function PatientCardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="ws-empty">
+          <b>Klinik kart yüklənir...</b>
+        </div>
+      }
+    >
+      <ClinicalCard />
+    </Suspense>
+  );
+}

@@ -43,7 +43,9 @@ type AdminUserRow = {
   createdAt: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://api-production-e6391.up.railway.app/api";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  "https://api-production-e6391.up.railway.app/api";
 
 function toIsoLocalDateTimeInput(date: Date) {
   const offset = date.getTimezoneOffset();
@@ -54,42 +56,50 @@ function toIsoLocalDateTimeInput(date: Date) {
 function formatDate(dateIso: string) {
   return new Intl.DateTimeFormat("az-Latn-AZ", {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
   }).format(new Date(dateIso));
 }
 
-function statusLabel(status: AppointmentSummary["status"], t: (key: string, fallback?: string) => string) {
+function statusLabel(
+  status: AppointmentSummary["status"],
+  t: (key: string, fallback?: string) => string,
+) {
   return t(`status.${status}`, status);
 }
 
-function channelLabel(channel: string, t: (key: string, fallback?: string) => string) {
+function channelLabel(
+  channel: string,
+  t: (key: string, fallback?: string) => string,
+) {
   return t(`channel.${channel}`, channel);
 }
 
 export function AdminPanel() {
-    // Tarix aralığı üçün state
-    const [fromDate, setFromDate] = useState<string>("");
-    const [toDate, setToDate] = useState<string>("");
-    const [rangeMetrics, setRangeMetrics] = useState<MetricState|null>(null);
+  // Tarix aralığı üçün state
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
+  const [rangeMetrics, setRangeMetrics] = useState<MetricState | null>(null);
 
-    // Tarix aralığı üçün statistikaları yüklə
-    const fetchRangeMetrics = async () => {
-      if (!fromDate || !toDate) return;
-      try {
-        const res = await fetch(`${API_BASE}/observability/metrics?from=${fromDate}T00:00:00.000Z&to=${toDate}T23:59:59.999Z`);
-        if (!res.ok) throw new Error("Statistika alınmadı");
-        const m = await res.json();
-        setRangeMetrics({
-          totalRequests: m.totalRequests ?? 0,
-          totalErrors: m.totalErrors ?? 0,
-          averageResponseMs: m.averageResponseMs ?? 0,
-          p95ResponseMs: m.p95ResponseMs ?? 0
-        });
-      } catch (e) {
-        setRangeMetrics(null);
-        setGlobalError("Tarix aralığı üçün statistika alınmadı");
-      }
-    };
+  // Tarix aralığı üçün statistikaları yüklə
+  const fetchRangeMetrics = async () => {
+    if (!fromDate || !toDate) return;
+    try {
+      const res = await fetch(
+        `${API_BASE}/observability/metrics?from=${fromDate}T00:00:00.000Z&to=${toDate}T23:59:59.999Z`,
+      );
+      if (!res.ok) throw new Error("Statistika alınmadı");
+      const m = await res.json();
+      setRangeMetrics({
+        totalRequests: m.totalRequests ?? 0,
+        totalErrors: m.totalErrors ?? 0,
+        averageResponseMs: m.averageResponseMs ?? 0,
+        p95ResponseMs: m.p95ResponseMs ?? 0,
+      });
+    } catch (e) {
+      setRangeMetrics(null);
+      setGlobalError("Tarix aralığı üçün statistika alınmadı");
+    }
+  };
   const { t } = useLocale();
   const [token, setToken] = useState<string>("");
   const [userEmail, setUserEmail] = useState("");
@@ -101,7 +111,7 @@ export function AdminPanel() {
     totalRequests: 0,
     totalErrors: 0,
     averageResponseMs: 0,
-    p95ResponseMs: 0
+    p95ResponseMs: 0,
   });
   const [appointments, setAppointments] = useState<AppointmentSummary[]>([]);
   const [patients, setPatients] = useState<PatientRow[]>([]);
@@ -124,7 +134,7 @@ export function AdminPanel() {
     lastName: "",
     phone: "",
     gender: "FEMALE",
-    birthDate: "1990-01-01"
+    birthDate: "1990-01-01",
   });
 
   const [doctorForm, setDoctorForm] = useState({
@@ -134,24 +144,28 @@ export function AdminPanel() {
     firstName: "",
     lastName: "",
     branch: "",
-    roomNumber: ""
+    roomNumber: "",
   });
 
   const [appointmentForm, setAppointmentForm] = useState({
     patientId: "",
     doctorId: "",
-    startsAt: toIsoLocalDateTimeInput(new Date(Date.now() + 24 * 60 * 60 * 1000)),
-    endsAt: toIsoLocalDateTimeInput(new Date(Date.now() + (24 * 60 + 20) * 60 * 1000)),
+    startsAt: toIsoLocalDateTimeInput(
+      new Date(Date.now() + 24 * 60 * 60 * 1000),
+    ),
+    endsAt: toIsoLocalDateTimeInput(
+      new Date(Date.now() + (24 * 60 + 20) * 60 * 1000),
+    ),
     channel: "web",
-    notes: ""
+    notes: "",
   });
 
   const authHeaders = useMemo(
     () => ({
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     }),
-    [token]
+    [token],
   );
 
   const loadData = useCallback(async () => {
@@ -164,17 +178,25 @@ export function AdminPanel() {
     const endDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     try {
-      const [metricsRes, meRes, appointmentsRes, patientsRes, doctorsRes, adminUsersRes, nursesRes] = await Promise.all([
+      const [
+        metricsRes,
+        meRes,
+        appointmentsRes,
+        patientsRes,
+        doctorsRes,
+        adminUsersRes,
+        nursesRes,
+      ] = await Promise.all([
         fetch(`${API_BASE}/observability/metrics`),
         fetch(`${API_BASE}/auth/me`, { headers: authHeaders }),
         fetch(
           `${API_BASE}/appointments/availability?startDate=${encodeURIComponent(startDate.toISOString())}&endDate=${encodeURIComponent(endDate.toISOString())}`,
-          { headers: authHeaders }
+          { headers: authHeaders },
         ),
         fetch(`${API_BASE}/patients`, { headers: authHeaders }),
         fetch(`${API_BASE}/doctors`, { headers: authHeaders }),
         fetch(`${API_BASE}/admin-users`, { headers: authHeaders }),
-        fetch(`${API_BASE}/nurses`, { headers: authHeaders })
+        fetch(`${API_BASE}/nurses`, { headers: authHeaders }),
       ]);
 
       if (metricsRes.ok) {
@@ -183,7 +205,7 @@ export function AdminPanel() {
           totalRequests: m.totalRequests ?? 0,
           totalErrors: m.totalErrors ?? 0,
           averageResponseMs: m.averageResponseMs ?? 0,
-          p95ResponseMs: m.p95ResponseMs ?? 0
+          p95ResponseMs: m.p95ResponseMs ?? 0,
         });
       }
 
@@ -201,7 +223,10 @@ export function AdminPanel() {
         const patientData = await patientsRes.json();
         setPatients(patientData);
         if (!appointmentForm.patientId && patientData.length > 0) {
-          setAppointmentForm((prev) => ({ ...prev, patientId: patientData[0].id }));
+          setAppointmentForm((prev) => ({
+            ...prev,
+            patientId: patientData[0].id,
+          }));
         }
       }
 
@@ -209,7 +234,10 @@ export function AdminPanel() {
         const doctorData = await doctorsRes.json();
         setDoctors(doctorData);
         if (!appointmentForm.doctorId && doctorData.length > 0) {
-          setAppointmentForm((prev) => ({ ...prev, doctorId: doctorData[0].id }));
+          setAppointmentForm((prev) => ({
+            ...prev,
+            doctorId: doctorData[0].id,
+          }));
         }
       }
 
@@ -221,12 +249,15 @@ export function AdminPanel() {
         setNurses(await nursesRes.json());
       }
     } catch (error) {
-      setGlobalError(error instanceof Error ? error.message : t("messages.unknownError"));
+      setGlobalError(
+        error instanceof Error ? error.message : t("messages.unknownError"),
+      );
     }
   }, [appointmentForm.doctorId, appointmentForm.patientId, authHeaders, token]);
 
   useEffect(() => {
-    const savedToken = globalThis.localStorage?.getItem("hospital_admin_token") ?? "";
+    const savedToken =
+      globalThis.localStorage?.getItem("hospital_admin_token") ?? "";
     if (savedToken) {
       setToken(savedToken);
     }
@@ -249,8 +280,8 @@ export function AdminPanel() {
       body: JSON.stringify({
         setupKey: bootstrapSetupKey,
         email: bootstrapEmail,
-        password: bootstrapPassword
-      })
+        password: bootstrapPassword,
+      }),
     });
 
     if (!response.ok) {
@@ -269,7 +300,7 @@ export function AdminPanel() {
     const response = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: loginEmail, password: loginPassword })
+      body: JSON.stringify({ email: loginEmail, password: loginPassword }),
     });
 
     if (!response.ok) {
@@ -292,8 +323,10 @@ export function AdminPanel() {
       headers: authHeaders,
       body: JSON.stringify({
         ...patientForm,
-        birthDate: new Date(`${patientForm.birthDate}T00:00:00.000Z`).toISOString()
-      })
+        birthDate: new Date(
+          `${patientForm.birthDate}T00:00:00.000Z`,
+        ).toISOString(),
+      }),
     });
 
     if (!response.ok) {
@@ -311,7 +344,7 @@ export function AdminPanel() {
       lastName: "",
       phone: "",
       gender: "FEMALE",
-      birthDate: "1990-01-01"
+      birthDate: "1990-01-01",
     });
     await loadData();
   }
@@ -326,8 +359,8 @@ export function AdminPanel() {
       body: JSON.stringify({
         ...doctorForm,
         roomNumber: doctorForm.roomNumber || undefined,
-        active: true
-      })
+        active: true,
+      }),
     });
 
     if (!response.ok) {
@@ -344,7 +377,7 @@ export function AdminPanel() {
       firstName: "",
       lastName: "",
       branch: "",
-      roomNumber: ""
+      roomNumber: "",
     });
     await loadData();
   }
@@ -359,8 +392,8 @@ export function AdminPanel() {
       body: JSON.stringify({
         ...appointmentForm,
         startsAt: new Date(appointmentForm.startsAt).toISOString(),
-        endsAt: new Date(appointmentForm.endsAt).toISOString()
-      })
+        endsAt: new Date(appointmentForm.endsAt).toISOString(),
+      }),
     });
 
     if (!response.ok) {
@@ -383,8 +416,8 @@ export function AdminPanel() {
       body: JSON.stringify({
         email: bootstrapEmail,
         password: bootstrapPassword,
-        role: "CALL_CENTER"
-      })
+        role: "CALL_CENTER",
+      }),
     });
 
     if (!response.ok) {
@@ -398,7 +431,11 @@ export function AdminPanel() {
   }
 
   async function deleteDoctor(id: string) {
-    if (!confirm("Bu hekimi silmək istədiyinizdən əminsiniz? Bu əməliyyat geri qaytarıl bilməz.")) {
+    if (
+      !confirm(
+        "Bu hekimi silmək istədiyinizdən əminsiniz? Bu əməliyyat geri qaytarıl bilməz.",
+      )
+    ) {
       return;
     }
 
@@ -407,7 +444,7 @@ export function AdminPanel() {
 
     const response = await fetch(`${API_BASE}/doctors/${id}`, {
       method: "DELETE",
-      headers: authHeaders
+      headers: authHeaders,
     });
 
     if (!response.ok) {
@@ -421,7 +458,11 @@ export function AdminPanel() {
   }
 
   async function deleteNurse(id: string) {
-    if (!confirm("Bu hemşirəni silmək istədiyinizdən əminsiniz? Bu əməliyyat geri qaytarıl bilməz.")) {
+    if (
+      !confirm(
+        "Bu hemşirəni silmək istədiyinizdən əminsiniz? Bu əməliyyat geri qaytarıl bilməz.",
+      )
+    ) {
       return;
     }
 
@@ -430,7 +471,7 @@ export function AdminPanel() {
 
     const response = await fetch(`${API_BASE}/nurses/${id}`, {
       method: "DELETE",
-      headers: authHeaders
+      headers: authHeaders,
     });
 
     if (!response.ok) {
@@ -450,16 +491,25 @@ export function AdminPanel() {
           <article className="panel-card auth-card">
             <span className="eyebrow">Admin girişi</span>
             <h1>Canlı admin panel üçün giriş edin</h1>
-            <p>İlk dəfə istifadə edirsinizsə əvvəl admin bootstrap edin, sonra login ilə token alın.</p>
+            <p>
+              İlk dəfə istifadə edirsinizsə əvvəl admin bootstrap edin, sonra
+              login ilə token alın.
+            </p>
 
             <div className="form-grid single">
               <label>
                 Qurulum açarı
-                <input value={bootstrapSetupKey} onChange={(e) => setBootstrapSetupKey(e.target.value)} />
+                <input
+                  value={bootstrapSetupKey}
+                  onChange={(e) => setBootstrapSetupKey(e.target.value)}
+                />
               </label>
               <label>
                 Admin e-poçtu
-                <input value={bootstrapEmail} onChange={(e) => setBootstrapEmail(e.target.value)} />
+                <input
+                  value={bootstrapEmail}
+                  onChange={(e) => setBootstrapEmail(e.target.value)}
+                />
               </label>
               <label>
                 Admin şifrəsi
@@ -477,18 +527,27 @@ export function AdminPanel() {
             <div className="form-grid single">
               <label>
                 Login e-poçt
-                <input value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
+                <input
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                />
               </label>
               <label>
                 Login şifrə
-                <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                />
               </label>
               <button type="button" onClick={() => void doLogin()}>
                 Giriş et
               </button>
             </div>
 
-            {globalMessage ? <p className="status-ok">{globalMessage}</p> : null}
+            {globalMessage ? (
+              <p className="status-ok">{globalMessage}</p>
+            ) : null}
             {globalError ? <p className="status-error">{globalError}</p> : null}
           </article>
         </section>
@@ -498,25 +557,61 @@ export function AdminPanel() {
 
   return (
     <main className="admin-shell">
-      <section style={{padding:16, background:'#f8f8f8', borderRadius:8, margin:'16px 0'}}>
+      <section
+        style={{
+          padding: 16,
+          background: "#f8f8f8",
+          borderRadius: 8,
+          margin: "16px 0",
+        }}
+      >
         <h3>Tarixə görə API statistikası</h3>
-        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <label>
             Başlanğıc tarix:
-            <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} />
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+            />
           </label>
           <label>
             Son tarix:
-            <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} />
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+            />
           </label>
-          <button type="button" onClick={fetchRangeMetrics} style={{height:32}}>Statistikanı göstər</button>
+          <button
+            type="button"
+            onClick={fetchRangeMetrics}
+            style={{ height: 32 }}
+          >
+            Statistikanı göstər
+          </button>
         </div>
         {rangeMetrics && (
-          <div style={{marginTop:12,display:'flex',gap:16}}>
-            <div>Toplam sorğu: <b>{rangeMetrics.totalRequests}</b></div>
-            <div>Xəta sayı: <b>{rangeMetrics.totalErrors}</b></div>
-            <div>Orta cavab: <b>{rangeMetrics.averageResponseMs} ms</b></div>
-            <div>P95: <b>{rangeMetrics.p95ResponseMs} ms</b></div>
+          <div style={{ marginTop: 12, display: "flex", gap: 16 }}>
+            <div>
+              Toplam sorğu: <b>{rangeMetrics.totalRequests}</b>
+            </div>
+            <div>
+              Xəta sayı: <b>{rangeMetrics.totalErrors}</b>
+            </div>
+            <div>
+              Orta cavab: <b>{rangeMetrics.averageResponseMs} ms</b>
+            </div>
+            <div>
+              P95: <b>{rangeMetrics.p95ResponseMs} ms</b>
+            </div>
           </div>
         )}
       </section>
@@ -562,7 +657,10 @@ export function AdminPanel() {
           <div>
             <span className="eyebrow">Canlı API ilə inteqrasiya</span>
             <h1>Admin panel real verilənlərlə işləyir</h1>
-            <p>Bu ekran JWT token ilə qorunan backend endpoint-lərindən real data çəkir və form submit edir.</p>
+            <p>
+              Bu ekran JWT token ilə qorunan backend endpoint-lərindən real data
+              çəkir və form submit edir.
+            </p>
           </div>
           <div className="topbar-actions">
             <button type="button" onClick={() => void loadData()}>
@@ -611,7 +709,9 @@ export function AdminPanel() {
                 E-poçt
                 <input
                   value={patientForm.email}
-                  onChange={(e) => setPatientForm((p) => ({ ...p, email: e.target.value }))}
+                  onChange={(e) =>
+                    setPatientForm((p) => ({ ...p, email: e.target.value }))
+                  }
                 />
               </label>
               <label>
@@ -619,42 +719,57 @@ export function AdminPanel() {
                 <input
                   type="password"
                   value={patientForm.password}
-                  onChange={(e) => setPatientForm((p) => ({ ...p, password: e.target.value }))}
+                  onChange={(e) =>
+                    setPatientForm((p) => ({ ...p, password: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Şəxsiyyət nömrəsi
                 <input
                   value={patientForm.identityNumber}
-                  onChange={(e) => setPatientForm((p) => ({ ...p, identityNumber: e.target.value }))}
+                  onChange={(e) =>
+                    setPatientForm((p) => ({
+                      ...p,
+                      identityNumber: e.target.value,
+                    }))
+                  }
                 />
               </label>
               <label>
                 Ad
                 <input
                   value={patientForm.firstName}
-                  onChange={(e) => setPatientForm((p) => ({ ...p, firstName: e.target.value }))}
+                  onChange={(e) =>
+                    setPatientForm((p) => ({ ...p, firstName: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Soyad
                 <input
                   value={patientForm.lastName}
-                  onChange={(e) => setPatientForm((p) => ({ ...p, lastName: e.target.value }))}
+                  onChange={(e) =>
+                    setPatientForm((p) => ({ ...p, lastName: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Telefon
                 <input
                   value={patientForm.phone}
-                  onChange={(e) => setPatientForm((p) => ({ ...p, phone: e.target.value }))}
+                  onChange={(e) =>
+                    setPatientForm((p) => ({ ...p, phone: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Cins
                 <select
                   value={patientForm.gender}
-                  onChange={(e) => setPatientForm((p) => ({ ...p, gender: e.target.value }))}
+                  onChange={(e) =>
+                    setPatientForm((p) => ({ ...p, gender: e.target.value }))
+                  }
                 >
                   <option value="FEMALE">Qadın</option>
                   <option value="MALE">Kişi</option>
@@ -666,7 +781,9 @@ export function AdminPanel() {
                 <input
                   type="date"
                   value={patientForm.birthDate}
-                  onChange={(e) => setPatientForm((p) => ({ ...p, birthDate: e.target.value }))}
+                  onChange={(e) =>
+                    setPatientForm((p) => ({ ...p, birthDate: e.target.value }))
+                  }
                 />
               </label>
             </div>
@@ -689,7 +806,9 @@ export function AdminPanel() {
                 E-poçt
                 <input
                   value={doctorForm.email}
-                  onChange={(e) => setDoctorForm((d) => ({ ...d, email: e.target.value }))}
+                  onChange={(e) =>
+                    setDoctorForm((d) => ({ ...d, email: e.target.value }))
+                  }
                 />
               </label>
               <label>
@@ -697,42 +816,54 @@ export function AdminPanel() {
                 <input
                   type="password"
                   value={doctorForm.password}
-                  onChange={(e) => setDoctorForm((d) => ({ ...d, password: e.target.value }))}
+                  onChange={(e) =>
+                    setDoctorForm((d) => ({ ...d, password: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Unvan
                 <input
                   value={doctorForm.title}
-                  onChange={(e) => setDoctorForm((d) => ({ ...d, title: e.target.value }))}
+                  onChange={(e) =>
+                    setDoctorForm((d) => ({ ...d, title: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Ad
                 <input
                   value={doctorForm.firstName}
-                  onChange={(e) => setDoctorForm((d) => ({ ...d, firstName: e.target.value }))}
+                  onChange={(e) =>
+                    setDoctorForm((d) => ({ ...d, firstName: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Soyad
                 <input
                   value={doctorForm.lastName}
-                  onChange={(e) => setDoctorForm((d) => ({ ...d, lastName: e.target.value }))}
+                  onChange={(e) =>
+                    setDoctorForm((d) => ({ ...d, lastName: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Şöbə
                 <input
                   value={doctorForm.branch}
-                  onChange={(e) => setDoctorForm((d) => ({ ...d, branch: e.target.value }))}
+                  onChange={(e) =>
+                    setDoctorForm((d) => ({ ...d, branch: e.target.value }))
+                  }
                 />
               </label>
               <label>
                 Otaq
                 <input
                   value={doctorForm.roomNumber}
-                  onChange={(e) => setDoctorForm((d) => ({ ...d, roomNumber: e.target.value }))}
+                  onChange={(e) =>
+                    setDoctorForm((d) => ({ ...d, roomNumber: e.target.value }))
+                  }
                 />
               </label>
             </div>
@@ -751,7 +882,9 @@ export function AdminPanel() {
                     </p>
                   </div>
                   <div className="doctor-actions">
-                    <span data-active={doctor.active}>{doctor.active ? "Aktiv" : "Deaktiv"}</span>
+                    <span data-active={doctor.active}>
+                      {doctor.active ? "Aktiv" : "Deaktiv"}
+                    </span>
                     {!doctor.active && (
                       <button
                         type="button"
@@ -782,7 +915,12 @@ export function AdminPanel() {
                 Pasiyent
                 <select
                   value={appointmentForm.patientId}
-                  onChange={(e) => setAppointmentForm((a) => ({ ...a, patientId: e.target.value }))}
+                  onChange={(e) =>
+                    setAppointmentForm((a) => ({
+                      ...a,
+                      patientId: e.target.value,
+                    }))
+                  }
                 >
                   <option value="">Seçin</option>
                   {patients.map((patient) => (
@@ -797,7 +935,12 @@ export function AdminPanel() {
                 Həkim
                 <select
                   value={appointmentForm.doctorId}
-                  onChange={(e) => setAppointmentForm((a) => ({ ...a, doctorId: e.target.value }))}
+                  onChange={(e) =>
+                    setAppointmentForm((a) => ({
+                      ...a,
+                      doctorId: e.target.value,
+                    }))
+                  }
                 >
                   <option value="">Seçin</option>
                   {doctors.map((doctor) => (
@@ -813,7 +956,12 @@ export function AdminPanel() {
                 <input
                   type="datetime-local"
                   value={appointmentForm.startsAt}
-                  onChange={(e) => setAppointmentForm((a) => ({ ...a, startsAt: e.target.value }))}
+                  onChange={(e) =>
+                    setAppointmentForm((a) => ({
+                      ...a,
+                      startsAt: e.target.value,
+                    }))
+                  }
                 />
               </label>
 
@@ -822,7 +970,12 @@ export function AdminPanel() {
                 <input
                   type="datetime-local"
                   value={appointmentForm.endsAt}
-                  onChange={(e) => setAppointmentForm((a) => ({ ...a, endsAt: e.target.value }))}
+                  onChange={(e) =>
+                    setAppointmentForm((a) => ({
+                      ...a,
+                      endsAt: e.target.value,
+                    }))
+                  }
                 />
               </label>
 
@@ -830,7 +983,12 @@ export function AdminPanel() {
                 Kanal
                 <select
                   value={appointmentForm.channel}
-                  onChange={(e) => setAppointmentForm((a) => ({ ...a, channel: e.target.value }))}
+                  onChange={(e) =>
+                    setAppointmentForm((a) => ({
+                      ...a,
+                      channel: e.target.value,
+                    }))
+                  }
                 >
                   <option value="web">Veb</option>
                   <option value="mobile">Mobil</option>
@@ -842,7 +1000,9 @@ export function AdminPanel() {
                 Qeyd
                 <input
                   value={appointmentForm.notes}
-                  onChange={(e) => setAppointmentForm((a) => ({ ...a, notes: e.target.value }))}
+                  onChange={(e) =>
+                    setAppointmentForm((a) => ({ ...a, notes: e.target.value }))
+                  }
                 />
               </label>
             </div>
@@ -862,7 +1022,9 @@ export function AdminPanel() {
                   </div>
                   <div className="appointment-meta">
                     <span>{channelLabel(appointment.channel, t)}</span>
-                    <span data-status={appointment.status}>{statusLabel(appointment.status, t)}</span>
+                    <span data-status={appointment.status}>
+                      {statusLabel(appointment.status, t)}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -885,7 +1047,9 @@ export function AdminPanel() {
                     <p>Yaradılıb: {formatDate(nurse.createdAt)}</p>
                   </div>
                   <div className="nurse-actions">
-                    <span data-active={nurse.active}>{nurse.active ? "Aktiv" : "Deaktiv"}</span>
+                    <span data-active={nurse.active}>
+                      {nurse.active ? "Aktiv" : "Deaktiv"}
+                    </span>
                     {!nurse.active && (
                       <button
                         type="button"

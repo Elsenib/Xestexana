@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { LOCALES, type Locale, useLocale } from "./LocaleProvider";
 import jsPDF from "jspdf";
 
-
 import {
   loadPDFTemplate,
   savePDFTemplate,
@@ -226,7 +225,8 @@ type PatientPortalData = {
 };
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://api-production-e6391.up.railway.app/api";
+  process.env.NEXT_PUBLIC_API_URL ??
+  "https://api-production-e6391.up.railway.app/api";
 
 function toInputDateTime(offsetHours: number) {
   const date = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
@@ -1092,200 +1092,223 @@ export function RolePortal() {
       .replace(/Ç/g, "C");
   }
 
-async function downloadReport() {
-  resetFeedback();
-  try {
-    const selectedPatient = doctorDashboard?.patients.find(
-      (p) => p.id === medicalRecordForm.patientId,
-    );
-    if (!selectedPatient) {
-      setError("Xeste tapilmadi.");
-      return;
-    }
-
-    const template = loadPDFTemplate();
-    const doc = new jsPDF();
-
-    // Font yüklə
-    let fontName = "Helvetica";
+  async function downloadReport() {
+    resetFeedback();
     try {
-      const response = await fetch("/fonts/DejaVuSans.ttf");
-      const buffer = await response.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(buffer).reduce((d, b) => d + String.fromCharCode(b), "")
+      const selectedPatient = doctorDashboard?.patients.find(
+        (p) => p.id === medicalRecordForm.patientId,
       );
-      doc.addFileToVFS("DejaVuSans.ttf", base64);
-      doc.addFont("DejaVuSans.ttf", "DejaVuSans", "normal");
-      fontName = "DejaVuSans";
-    } catch { /* font olmasa Helvetica işlər */ }
-
-    // Header
-    doc.setFontSize(20);
-    doc.setFont(fontName);
-    doc.text("TİBBİ RAPOR", 105, 20, { align: "center" });
-
-    let yPosition = 40;
-
-    // Logo
-    if (template.hospitalLogo) {
-      try {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        await new Promise((resolve) => {
-          img.onload = () => {
-            doc.addImage(img, "PNG", 20, yPosition, 30, 30);
-            yPosition += 35;
-            resolve(true);
-          };
-          img.onerror = () => {
-            doc.setFontSize(12);
-            doc.setFont(fontName);
-            doc.text("[Klinik Logosu]", 20, yPosition);
-            yPosition += 15;
-            resolve(true);
-          };
-          img.src = template.hospitalLogo || "";
-        });
-      } catch {
-        yPosition += 5;
+      if (!selectedPatient) {
+        setError("Xeste tapilmadi.");
+        return;
       }
-    }
 
-    // Xəstəxana məlumatları
-    doc.setFontSize(12);
-    doc.setFont(fontName);
-    doc.text(template.hospitalName, 20, yPosition);
-    yPosition += 10;
+      const template = loadPDFTemplate();
+      const doc = new jsPDF();
 
-    if (template.hospitalAddress) {
-      doc.text(`Unvan: ${template.hospitalAddress}`, 20, yPosition);
+      // Font yüklə
+      let fontName = "Helvetica";
+      try {
+        const response = await fetch("/fonts/DejaVuSans.ttf");
+        const buffer = await response.arrayBuffer();
+        const base64 = btoa(
+          new Uint8Array(buffer).reduce(
+            (d, b) => d + String.fromCharCode(b),
+            "",
+          ),
+        );
+        doc.addFileToVFS("DejaVuSans.ttf", base64);
+        doc.addFont("DejaVuSans.ttf", "DejaVuSans", "normal");
+        fontName = "DejaVuSans";
+      } catch {
+        /* font olmasa Helvetica işlər */
+      }
+
+      // Header
+      doc.setFontSize(20);
+      doc.setFont(fontName);
+      doc.text("TİBBİ RAPOR", 105, 20, { align: "center" });
+
+      let yPosition = 40;
+
+      // Logo
+      if (template.hospitalLogo) {
+        try {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          await new Promise((resolve) => {
+            img.onload = () => {
+              doc.addImage(img, "PNG", 20, yPosition, 30, 30);
+              yPosition += 35;
+              resolve(true);
+            };
+            img.onerror = () => {
+              doc.setFontSize(12);
+              doc.setFont(fontName);
+              doc.text("[Klinik Logosu]", 20, yPosition);
+              yPosition += 15;
+              resolve(true);
+            };
+            img.src = template.hospitalLogo || "";
+          });
+        } catch {
+          yPosition += 5;
+        }
+      }
+
+      // Xəstəxana məlumatları
+      doc.setFontSize(12);
+      doc.setFont(fontName);
+      doc.text(template.hospitalName, 20, yPosition);
       yPosition += 10;
-    }
 
-    if (template.hospitalPhone) {
-      doc.text(`Telefon: ${template.hospitalPhone}`, 20, yPosition);
-      yPosition += 10;
-    }
+      if (template.hospitalAddress) {
+        doc.text(`Unvan: ${template.hospitalAddress}`, 20, yPosition);
+        yPosition += 10;
+      }
 
-    doc.text(`Tarix: ${new Date().toLocaleDateString("az-AZ")}`, 20, yPosition);
-    yPosition += 20;
+      if (template.hospitalPhone) {
+        doc.text(`Telefon: ${template.hospitalPhone}`, 20, yPosition);
+        yPosition += 10;
+      }
 
-    // Xəstə məlumatları
-    doc.setFontSize(14);
-    doc.setFont(fontName);
-    doc.text("PASIYENT MƏLUMATLARI", 20, yPosition);
-    yPosition += 15;
+      doc.text(
+        `Tarix: ${new Date().toLocaleDateString("az-AZ")}`,
+        20,
+        yPosition,
+      );
+      yPosition += 20;
 
-    doc.setFontSize(12);
-    doc.setFont(fontName);
-    doc.text(`Ad Soyad: ${selectedPatient.fullName}`, 20, yPosition);
-    yPosition += 10;
-    doc.text(`Sexsiyyet Vesiqesi N: ${selectedPatient.identityNumber}`, 20, yPosition);
-    yPosition += 10;
-    doc.text(`Diaqnoz: ${medicalRecordForm.diagnosis}`, 20, yPosition);
-    yPosition += 10;
-
-    // Hesabat növü
-    const reportTypeLabels: Record<string, string> = {
-      general: "Umumi Hesabat",
-      "blood-test": "Qan Analizi",
-      "x-ray": "Rentgen",
-      ultrasound: "Ultrason",
-      ecg: "EKG",
-      biopsy: "Biyopsiya",
-      consultation: "Meslehetlesme",
-    };
-    doc.text(
-      `Hesabat Novu: ${reportTypeLabels[medicalRecordForm.reportType] ?? medicalRecordForm.reportType}`,
-      20,
-      yPosition,
-    );
-    yPosition += 20;
-
-    // Müalicə planı
-    doc.setFontSize(14);
-    doc.setFont(fontName);
-    doc.text("MÜALİCƏ PLANI", 20, yPosition);
-    yPosition += 15;
-
-    doc.setFontSize(12);
-    doc.setFont(fontName);
-    const treatmentLines = doc.splitTextToSize(medicalRecordForm.treatmentPlan, 170);
-    doc.text(treatmentLines, 20, yPosition);
-    yPosition += treatmentLines.length * 5 + 10;
-
-    // Qan analizi nəticələri
-    if (medicalRecordForm.reportType === "blood-test" && medicalRecordForm.testResults.length > 0) {
+      // Xəstə məlumatları
       doc.setFontSize(14);
       doc.setFont(fontName);
-      doc.text("ANALİZ NƏTİCƏLƏRİ", 20, yPosition);
+      doc.text("PASIYENT MƏLUMATLARI", 20, yPosition);
       yPosition += 15;
 
-      doc.setFontSize(10);
+      doc.setFontSize(12);
       doc.setFont(fontName);
-      doc.text("Analiz Adi", 20, yPosition);
-      doc.text("Deyeri", 80, yPosition);
-      doc.text("Vahid", 110, yPosition);
-      doc.text("Referans", 130, yPosition);
-      doc.text("Veziyyet", 170, yPosition);
-      yPosition += 8;
-
-      medicalRecordForm.testResults.forEach((test) => {
-        doc.text(test.testName, 20, yPosition);
-        doc.text(test.value, 80, yPosition);
-        doc.text(test.unit, 110, yPosition);
-        doc.text(test.referenceRange, 130, yPosition);
-        const statusText: Record<string, string> = {
-          normal: "Normal",
-          high: "Yüksek",
-          low: "Aşağı",
-          critical: "Təhlükəli",
-        };
-        doc.text(statusText[test.status] ?? test.status, 170, yPosition);
-        yPosition += 8;
-      });
+      doc.text(`Ad Soyad: ${selectedPatient.fullName}`, 20, yPosition);
       yPosition += 10;
-    }
+      doc.text(
+        `Sexsiyyet Vesiqesi N: ${selectedPatient.identityNumber}`,
+        20,
+        yPosition,
+      );
+      yPosition += 10;
+      doc.text(`Diaqnoz: ${medicalRecordForm.diagnosis}`, 20, yPosition);
+      yPosition += 10;
 
-    // Xüsusi sahələr
-    if (template.customFields && template.customFields.length > 0) {
-      template.customFields.forEach((field) => {
-        doc.setFontSize(12);
+      // Hesabat növü
+      const reportTypeLabels: Record<string, string> = {
+        general: "Umumi Hesabat",
+        "blood-test": "Qan Analizi",
+        "x-ray": "Rentgen",
+        ultrasound: "Ultrason",
+        ecg: "EKG",
+        biopsy: "Biyopsiya",
+        consultation: "Meslehetlesme",
+      };
+      doc.text(
+        `Hesabat Novu: ${reportTypeLabels[medicalRecordForm.reportType] ?? medicalRecordForm.reportType}`,
+        20,
+        yPosition,
+      );
+      yPosition += 20;
+
+      // Müalicə planı
+      doc.setFontSize(14);
+      doc.setFont(fontName);
+      doc.text("MÜALİCƏ PLANI", 20, yPosition);
+      yPosition += 15;
+
+      doc.setFontSize(12);
+      doc.setFont(fontName);
+      const treatmentLines = doc.splitTextToSize(
+        medicalRecordForm.treatmentPlan,
+        170,
+      );
+      doc.text(treatmentLines, 20, yPosition);
+      yPosition += treatmentLines.length * 5 + 10;
+
+      // Qan analizi nəticələri
+      if (
+        medicalRecordForm.reportType === "blood-test" &&
+        medicalRecordForm.testResults.length > 0
+      ) {
+        doc.setFontSize(14);
         doc.setFont(fontName);
-        doc.text(`${field.label}: ${field.value}`, 20, yPosition);
+        doc.text("ANALİZ NƏTİCƏLƏRİ", 20, yPosition);
+        yPosition += 15;
+
+        doc.setFontSize(10);
+        doc.setFont(fontName);
+        doc.text("Analiz Adi", 20, yPosition);
+        doc.text("Deyeri", 80, yPosition);
+        doc.text("Vahid", 110, yPosition);
+        doc.text("Referans", 130, yPosition);
+        doc.text("Veziyyet", 170, yPosition);
+        yPosition += 8;
+
+        medicalRecordForm.testResults.forEach((test) => {
+          doc.text(test.testName, 20, yPosition);
+          doc.text(test.value, 80, yPosition);
+          doc.text(test.unit, 110, yPosition);
+          doc.text(test.referenceRange, 130, yPosition);
+          const statusText: Record<string, string> = {
+            normal: "Normal",
+            high: "Yüksek",
+            low: "Aşağı",
+            critical: "Təhlükəli",
+          };
+          doc.text(statusText[test.status] ?? test.status, 170, yPosition);
+          yPosition += 8;
+        });
         yPosition += 10;
-      });
-      yPosition += 10;
-    }
+      }
 
-    // Həkim imzası
-    doc.setFontSize(12);
-    doc.setFont(fontName);
-    doc.text(`${template.doctorTitle}: ${doctorDashboard?.doctor.fullName}`, 20, yPosition);
-    yPosition += 10;
-    doc.text(`İxtisas: ${doctorDashboard?.doctor.branch}`, 20, yPosition);
-    yPosition += 15;
-    doc.text(template.doctorSignature, 20, yPosition);
+      // Xüsusi sahələr
+      if (template.customFields && template.customFields.length > 0) {
+        template.customFields.forEach((field) => {
+          doc.setFontSize(12);
+          doc.setFont(fontName);
+          doc.text(`${field.label}: ${field.value}`, 20, yPosition);
+          yPosition += 10;
+        });
+        yPosition += 10;
+      }
 
-    // Footer
-    if (template.footerText) {
-      const pageHeight = doc.internal.pageSize.height;
-      doc.setFontSize(8);
+      // Həkim imzası
+      doc.setFontSize(12);
       doc.setFont(fontName);
-      doc.text(template.footerText, 20, pageHeight - 20);
+      doc.text(
+        `${template.doctorTitle}: ${doctorDashboard?.doctor.fullName}`,
+        20,
+        yPosition,
+      );
+      yPosition += 10;
+      doc.text(`İxtisas: ${doctorDashboard?.doctor.branch}`, 20, yPosition);
+      yPosition += 15;
+      doc.text(template.doctorSignature, 20, yPosition);
+
+      // Footer
+      if (template.footerText) {
+        const pageHeight = doc.internal.pageSize.height;
+        doc.setFontSize(8);
+        doc.setFont(fontName);
+        doc.text(template.footerText, 20, pageHeight - 20);
+      }
+
+      const fileName = `hesabat_${normalizeFileName(selectedPatient.fullName).replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
+      doc.save(fileName);
+
+      setMessage("PDF hesabat ugurla yuklendi.");
+    } catch (error) {
+      setError(
+        "PDF yaratma zamanı xəta baş verdi: " +
+          (error instanceof Error ? error.message : "Namelum xeta"),
+      );
     }
-
-    const fileName = `hesabat_${normalizeFileName(selectedPatient.fullName).replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
-    doc.save(fileName);
-
-    setMessage("PDF hesabat ugurla yuklendi.");
-  } catch (error) {
-    setError(
-      "PDF yaratma zamanı xəta baş verdi: " +
-        (error instanceof Error ? error.message : "Namelum xeta"),
-    );
   }
-}
   async function shareReport(method: "email" | "whatsapp") {
     // Sharing logic will be implemented here
     setMessage(

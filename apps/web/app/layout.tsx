@@ -8,16 +8,21 @@ import { ThemeProvider } from "../components/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "LovelyDent — Klinik idarəetmə sistemi",
-  description: "Xəstəxana qeydiyyatı və onlayn randevu platforması"
+  description: "Dental klinika üçün qəbul, klinik qeyd, kassa və idarəetmə platforması",
+  icons: {
+    icon: "/lovelydent-icon.png",
+    shortcut: "/lovelydent-icon.png",
+    apple: "/lovelydent-icon.png"
+  }
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="az">
       <body>
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

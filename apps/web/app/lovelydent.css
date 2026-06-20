@@ -336,7 +336,6 @@
   margin-bottom: 14px;
 }
 
-
 .ld-sidebar {
   position: fixed;
   inset: 18px auto 18px 18px;
@@ -572,10 +571,22 @@
   font-style: normal;
 }
 
-.yellow { background: #fff4d6; color: #9a6400; }
-.blue { background: #dbeafe; color: #1d4ed8; }
-.green { background: #dcfce7; color: #166534; }
-.violet { background: #ede9fe; color: #6d28d9; }
+.yellow {
+  background: #fff4d6;
+  color: #9a6400;
+}
+.blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.green {
+  background: #dcfce7;
+  color: #166534;
+}
+.violet {
+  background: #ede9fe;
+  color: #6d28d9;
+}
 
 .ld-grid {
   display: grid;

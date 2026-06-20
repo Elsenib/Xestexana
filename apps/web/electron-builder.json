@@ -1,6 +1,6 @@
 {
-  "appId": "com.xestexana.desktop",
-  "productName": "Xestexana Platform",
+  "appId": "az.lovelydent.desktop",
+  "productName": "LovelyDent",
   "directories": {
     "output": "dist_electron"
   },
@@ -13,7 +13,7 @@
     "package.json"
   ],
   "win": {
-    "icon": "build/icon-256.png",
+    "icon": "build/icon.ico",
     "target": "nsis"
   },
   "nsis": {

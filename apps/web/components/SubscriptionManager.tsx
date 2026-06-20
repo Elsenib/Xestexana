@@ -2,7 +2,8 @@ import { useState } from "react";
 import { LOCALES, type Locale, useLocale } from "./LocaleProvider";
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://api-production-e6391.up.railway.app/api";
+  process.env.NEXT_PUBLIC_API_URL ??
+  "https://api-production-e6391.up.railway.app/api";
 
 type SubscriptionPlan = "basic" | "professional" | "enterprise";
 
@@ -460,10 +461,9 @@ export function SubscriptionManager() {
           text-align: left;
         }
 
-
         .plan-limits {
           background: #3b3b3b;
-          color: #25D366;
+          color: #25d366;
           padding: 10px;
           border-radius: 8px;
           margin: 15px 0;
@@ -471,13 +471,13 @@ export function SubscriptionManager() {
         }
         body.dark .plan-limits {
           background: #232627;
-          color: #25D366;
+          color: #25d366;
         }
         .plan-features li {
-          color: #25D366;
+          color: #25d366;
         }
         body.dark .plan-features li {
-          color: #25D366;
+          color: #25d366;
         }
 
         .existing-clinic {
