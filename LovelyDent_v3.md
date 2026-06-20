@@ -623,7 +623,7 @@ Məqsəd: klinik proseduru pasiyent hesabı və kassa ilə əlaqələndirmək.
 
 - CRM, lead və recall.
 - WhatsApp inteqrasiyası.
-- Anbar, satınalma və material sərfi.
+- 🟡 Anbar, satınalma və material sərfi — məhsul kartı, real stok ledger-i, giriş, sərf, qaytarma, transfer, düzəliş, minimum stok və hərəkət tarixçəsi işləyir; təchizatçı və alış sifarişi qalır.
 - Həkim faizi və əməkhaqqı.
 - İmplant və zəmanət.
 - Tapşırıq sistemi.
@@ -740,6 +740,6 @@ Funksiya yalnız aşağıdakılar tamamlandıqda hazır sayılır:
 
 Əlavə görülmüş iş: `✅` tapşırıq sistemi skeleti, `✅` rol əsaslı iş sahəsi, `✅` Railway API deploy və health yoxlaması.
 
-Rol məntiqi üzrə görülənlər: `✅` Super Admin sistem görünüşü, `✅` Klinik Admin heyət idarəetməsi, `✅` Rəhbərlik üçün yalnız hesabat görünüşü, `✅` qeydiyyat/həkim/assistent/kassir/anbar/mühasib üçün məsuliyyətə uyğun menyu və dashboard.
+Rol məntiqi üzrə görülənlər: `✅` Super Admin bütün klinika-admin səlahiyyətlərini və sistem görünüşünü miras alır, `✅` Klinik Admin heyət idarəetməsi, `✅` Rəhbərlik üçün məxfi pasiyent detalları olmadan aqreqat hesabat görünüşü, `✅` qeydiyyat/həkim/assistent/kassir/anbar/mühasib üçün məsuliyyətə uyğun menyu və server icazələri.
 
 Hər backlog elementi ayrıca user story, biznes qaydası, ekran axını və acceptance criteria ilə development üçün hazırlanmalıdır.

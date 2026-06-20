@@ -35,31 +35,31 @@ export const navigation: NavigationItem[] = [
     href: "/appointments",
     label: "Təqvim və qəbullar",
     icon: "□",
-    roles: ["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
+    roles: ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
   },
   {
     href: "/patients",
     label: "Pasiyentlər",
     icon: "♙",
-    roles: ["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
+    roles: ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
   },
   {
     href: "/clinical",
     label: "Klinik iş",
     icon: "+",
-    roles: ["DOCTOR", "NURSE"],
+    roles: ["SUPER_ADMIN", "DOCTOR", "NURSE"],
   },
   {
     href: "/finance",
     label: "Kassa və maliyyə",
     icon: "₼",
-    roles: ["ADMIN", "CASHIER", "ACCOUNTANT"],
+    roles: ["SUPER_ADMIN", "ADMIN", "CASHIER", "ACCOUNTANT"],
   },
   {
     href: "/inventory",
     label: "Anbar",
     icon: "◇",
-    roles: ["ADMIN", "NURSE", "INVENTORY_MANAGER"],
+    roles: ["SUPER_ADMIN", "ADMIN", "NURSE", "INVENTORY_MANAGER"],
   },
   {
     href: "/reports",
@@ -71,7 +71,7 @@ export const navigation: NavigationItem[] = [
     href: "/administration",
     label: "Klinika idarəetməsi",
     icon: "⚙",
-    roles: ["ADMIN"],
+    roles: ["SUPER_ADMIN", "ADMIN"],
   },
 ];
 

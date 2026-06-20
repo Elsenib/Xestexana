@@ -33,7 +33,6 @@ export default function Page() {
 
   const completed = useMemo(() => appointments.filter((item) => item.status === "COMPLETED"), [appointments]);
   const cashQueue = useMemo(() => appointments.filter((item) => ["IN_TREATMENT", "COMPLETED"].includes(item.status)), [appointments]);
-  const estimatedRevenue = completed.length * 80;
 
   async function load() {
     const dates = range();
@@ -99,9 +98,9 @@ export default function Page() {
           <strong>{completed.length}</strong>
         </article>
         <article>
-          <span>TƏXMİNİ DÖVRİYYƏ</span>
-          <small>Demo tarif: 80 AZN</small>
-          <strong>{estimatedRevenue}₼</strong>
+          <span>TƏSDİQLİ DÖVRİYYƏ</span>
+          <small>Maliyyə ledger-indən hesablanacaq</small>
+          <strong>—</strong>
         </article>
       </section>
 

@@ -37,6 +37,8 @@ model Clinic {
   odontogramSnapshots OdontogramSnapshot[]
   clinicalEncounters ClinicalEncounter[]
   clinicalEncounterRevisions ClinicalEncounterRevision[]
+  products     Product[]
+  stockMovements StockMovement[]
 
   @@index([active])
   @@index([subscriptionStatus])
@@ -60,6 +62,7 @@ model User {
   authoredOdontograms OdontogramSnapshot[] @relation("OdontogramAuthor")
   doctorEncounters ClinicalEncounter[] @relation("EncounterDoctor")
   encounterRevisions ClinicalEncounterRevision[] @relation("EncounterRevisionAuthor")
+  stockMovements StockMovement[] @relation("StockMovementAuthor")
 
   @@index([clinicId, role])
 }
@@ -282,4 +285,42 @@ model ClinicalEncounterRevision {
 
   @@unique([encounterId, revision])
   @@index([clinicId, encounterId, createdAt])
+}
+
+
+model Product {
+  id             String          @id @default(cuid())
+  clinicId       String
+  name           String
+  category       String
+  sku            String
+  unit           String
+  minimumStock   Decimal         @default(0) @db.Decimal(14, 3)
+  location       String?
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  clinic         Clinic          @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  stockMovements StockMovement[]
+
+  @@unique([clinicId, sku])
+  @@index([clinicId, active, name])
+}
+
+model StockMovement {
+  id              String   @id @default(cuid())
+  clinicId        String
+  productId       String
+  type            String
+  quantity        Decimal  @db.Decimal(14, 3)
+  reason          String
+  reference       String?
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdBy       User     @relation("StockMovementAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, productId, createdAt])
+  @@index([clinicId, type, createdAt])
 }

@@ -39,6 +39,7 @@ const appointmentStatuses = [
 ] as const;
 
 const staffRoles = ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "NURSE", "DOCTOR"] as const;
+const financeViewerRoles = ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "NURSE", "DOCTOR", "CASHIER", "ACCOUNTANT"] as const;
 const editorRoles = ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "NURSE"] as const;
 
 const listQuerySchema = z.object({
@@ -92,7 +93,7 @@ export async function appointmentRoutes(app: FastifyInstance) {
   app.get(
     "/appointments",
     {
-      preHandler: [app.authenticate, app.authorize([...staffRoles])]
+      preHandler: [app.authenticate, app.authorize([...financeViewerRoles])]
     },
     async (request) => {
       const query = listQuerySchema.parse(request.query);

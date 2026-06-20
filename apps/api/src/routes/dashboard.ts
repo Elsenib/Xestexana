@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { UserRole } from "@hospital/shared";
+import { z } from "zod";
 
 const staffRoles: UserRole[] = [
   "SUPER_ADMIN",
@@ -16,6 +17,38 @@ const staffRoles: UserRole[] = [
 type Metric = { label: string; value: string; detail: string };
 
 export async function dashboardRoutes(app: FastifyInstance) {
+  app.get(
+    "/reports/operations",
+    { preHandler: [app.authenticate, app.authorize(["ADMIN", "ACCOUNTANT", "MANAGEMENT"])] },
+    async (request, reply) => {
+      const query = z.object({ startDate: z.string().datetime(), endDate: z.string().datetime() }).parse(request.query);
+      const startDate = new Date(query.startDate);
+      const endDate = new Date(query.endDate);
+      if (endDate <= startDate || endDate.getTime() - startDate.getTime() > 366 * 86400000) {
+        return reply.code(400).send({ message: "Hesabat tarix aralığı düzgün deyil." });
+      }
+      const [appointments, patientCount] = await Promise.all([
+        app.prisma.appointment.findMany({
+          where: { clinicId: request.user.clinicId, startsAt: { gte: startDate, lte: endDate } },
+          select: { status: true, doctor: { select: { branch: true } } },
+        }),
+        app.prisma.patientProfile.count({ where: { clinicId: request.user.clinicId } }),
+      ]);
+      const statusCounts: Record<string, number> = {};
+      const branchCounts: Record<string, number> = {};
+      for (const appointment of appointments) {
+        statusCounts[appointment.status] = (statusCounts[appointment.status] ?? 0) + 1;
+        branchCounts[appointment.doctor.branch] = (branchCounts[appointment.doctor.branch] ?? 0) + 1;
+      }
+      return {
+        appointmentCount: appointments.length,
+        patientCount,
+        statusCounts,
+        branchCounts: Object.entries(branchCounts).map(([branch, count]) => ({ branch, count })),
+      };
+    },
+  );
+
   app.get(
     "/dashboard/summary",
     { preHandler: [app.authenticate, app.authorize(staffRoles)] },
@@ -135,14 +168,32 @@ export async function dashboardRoutes(app: FastifyInstance) {
           ];
           actions = [{ label: "Kassa və maliyyəyə keç", href: "/finance" }];
           break;
-        case "INVENTORY_MANAGER":
+        case "INVENTORY_MANAGER": {
+          const products = await app.prisma.product.findMany({
+            where: { clinicId, active: true },
+            select: { id: true, minimumStock: true },
+          });
+          const totals = await app.prisma.stockMovement.groupBy({
+            by: ["productId", "type"],
+            where: { clinicId },
+            _sum: { quantity: true },
+          });
+          const incomingTypes = new Set(["PURCHASE", "TRANSFER_IN", "RETURN", "ADJUSTMENT_IN"]);
+          const critical = products.filter((product) => {
+            const balance = totals.filter((row) => row.productId === product.id).reduce(
+              (sum, row) => sum + (incomingTypes.has(row.type) ? 1 : -1) * Number(row._sum.quantity ?? 0),
+              0,
+            );
+            return balance <= product.minimumStock.toNumber();
+          }).length;
           metrics = [
-            { label: "Kritik stok", value: "—", detail: "Stok ledger-i qurulmalıdır" },
-            { label: "Gözləyən alış", value: "—", detail: "Satınalma modulu qurulmalıdır" },
-            { label: "Son istifadə riski", value: "—", detail: "Lot məlumatından hesablanacaq" },
+            { label: "Aktiv material", value: String(products.length), detail: "Məhsul kartları" },
+            { label: "Kritik stok", value: String(critical), detail: "Minimum və aşağı" },
+            { label: "Alış siqnalı", value: critical ? "Var" : "Yox", detail: "Stok ledger-i üzrə" },
           ];
           actions = [{ label: "Anbar moduluna keç", href: "/inventory" }];
           break;
+        }
         case "ACCOUNTANT":
           metrics = [
             { label: "Təsdiqli gəlir", value: "—", detail: "Maliyyə ledger-i qurulmalıdır" },

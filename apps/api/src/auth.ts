@@ -58,7 +58,9 @@ export function authorize(allowedRoles: UserRole[]) {
     }
 
     const role = (request.user as JwtUserPayload).role;
-    if (!allowedRoles.includes(role)) {
+    const superAdminCanManage =
+      role === "SUPER_ADMIN" && allowedRoles.some((allowed) => allowed !== "PATIENT");
+    if (!allowedRoles.includes(role) && !superAdminCanManage) {
       return reply.code(403).send({
         message: "Bu əməliyyat üçün icazəniz yoxdur."
       });

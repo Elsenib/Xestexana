@@ -1,22 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { apiRequest } from "../../../lib/lovelydent-api";
 
-type Appointment = {
-  id: string;
-  patientName: string;
-  doctorName: string;
-  branch: string;
-  startsAt: string;
-  status: string;
-};
-
-type Patient = {
-  id: string;
-  fullName: string;
-  createdAt: string;
+type Report = {
+  appointmentCount: number;
+  patientCount: number;
+  statusCounts: Record<string, number>;
+  branchCounts: Array<{ branch: string; count: number }>;
 };
 
 function range(days: number) {
@@ -29,28 +21,14 @@ function range(days: number) {
 }
 
 export default function Page() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [report, setReport] = useState<Report>({ appointmentCount: 0, patientCount: 0, statusCounts: {}, branchCounts: [] });
   const [error, setError] = useState("");
-
-  const completed = useMemo(() => appointments.filter((item) => item.status === "COMPLETED"), [appointments]);
-  const noShow = useMemo(() => appointments.filter((item) => item.status === "NO_SHOW"), [appointments]);
-  const byBranch = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const item of appointments) map.set(item.branch, (map.get(item.branch) ?? 0) + 1);
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
-  }, [appointments]);
 
   async function load() {
     const dates = range(7);
     setError("");
     try {
-      const [appointmentRows, patientRows] = await Promise.all([
-        apiRequest<Appointment[]>(`/appointments?startDate=${dates.startDate}&endDate=${dates.endDate}`),
-        apiRequest<Patient[]>("/patients?take=200")
-      ]);
-      setAppointments(appointmentRows);
-      setPatients(patientRows);
+      setReport(await apiRequest<Report>(`/reports/operations?startDate=${dates.startDate}&endDate=${dates.endDate}`));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hesabat məlumatları yüklənmədi.");
     }
@@ -77,17 +55,17 @@ export default function Page() {
         <article>
           <span>RANDEVU</span>
           <small>Son 7 gün</small>
-          <strong>{appointments.length}</strong>
+          <strong>{report.appointmentCount}</strong>
         </article>
         <article>
           <span>TAMAMLANMA</span>
           <small>Bitmiş qəbullar</small>
-          <strong>{completed.length}</strong>
+          <strong>{report.statusCounts.COMPLETED ?? 0}</strong>
         </article>
         <article>
           <span>PASİYENT BAZASI</span>
           <small>Aktiv qeydiyyat</small>
-          <strong>{patients.length}</strong>
+          <strong>{report.patientCount}</strong>
         </article>
       </section>
 
@@ -99,16 +77,16 @@ export default function Page() {
               <h2>Randevu paylanması</h2>
             </div>
           </header>
-          {byBranch.length ? (
+          {report.branchCounts.length ? (
             <div className="ws-flow-list">
-              {byBranch.map(([branch, count]) => (
-                <article className="ws-flow-card" key={branch}>
-                  <time>{count}</time>
+              {report.branchCounts.map((item) => (
+                <article className="ws-flow-card" key={item.branch}>
+                  <time>{item.count}</time>
                   <div>
-                    <b>{branch}</b>
+                    <b>{item.branch}</b>
                     <span>Son 7 gündə qəbul sayı</span>
                   </div>
-                  <em>{Math.round((count / appointments.length) * 100)}%</em>
+                  <em>{report.appointmentCount ? Math.round((item.count / report.appointmentCount) * 100) : 0}%</em>
                 </article>
               ))}
             </div>
@@ -123,7 +101,7 @@ export default function Page() {
         <aside className="ws-panel ws-focus">
           <p className="ws-eyebrow">Rəhbərlik qeydi</p>
           <h2>Operativ siqnallar</h2>
-          <p>No-show sayı: {noShow.length}. Tamamlanan qəbullar: {completed.length}. Növbəti mərhələdə gəlir, həkim performansı və material xərci buraya bağlanacaq.</p>
+          <p>No-show sayı: {report.statusCounts.NO_SHOW ?? 0}. Tamamlanan qəbullar: {report.statusCounts.COMPLETED ?? 0}. Maliyyə göstəriciləri yalnız ledger əməliyyatlarından sonra burada göstəriləcək.</p>
         </aside>
       </div>
     </>
