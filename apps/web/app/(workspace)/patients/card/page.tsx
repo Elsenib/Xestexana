@@ -103,12 +103,30 @@ const labels: Record<string, string> = {
   MISSING: "Çatışmır",
 };
 
+const emptyEncounter = {
+  complaint: "",
+  examination: "",
+  diagnosis: "",
+  clinicalNotes: "",
+  recommendations: "",
+  prescription: "",
+  nextVisitAt: "",
+};
+
+const encounterStatus: Record<string, string> = {
+  DRAFT: "Qaralama",
+  COMPLETED: "Tamamlandı",
+};
+
 function ClinicalCard() {
   const searchParams = useSearchParams();
   const id = searchParams?.get("id") ?? null;
   const [data, setData] = useState<Summary | null>(null);
   const [tab, setTab] = useState("summary");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [savingEncounter, setSavingEncounter] = useState(false);
+  const [encounter, setEncounter] = useState(emptyEncounter);
   const [anamnesis, setAnamnesis] = useState({
     allergies: "",
     chronicConditions: "",
@@ -201,6 +219,56 @@ function ClinicalCard() {
       setError(c instanceof Error ? c.message : "Odontogram saxlanmadı.");
     }
   }
+  async function saveEncounter(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!id) return;
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const shouldComplete = submitter?.value === "complete";
+    setError("");
+    setNotice("");
+    setSavingEncounter(true);
+    try {
+      const created = await apiRequest<{ id: string }>("/clinical-encounters", {
+        method: "POST",
+        body: JSON.stringify({
+          patientId: id,
+          ...encounter,
+          nextVisitAt: encounter.nextVisitAt
+            ? new Date(encounter.nextVisitAt).toISOString()
+            : null,
+        }),
+      });
+      if (shouldComplete) {
+        await apiRequest(`/clinical-encounters/${created.id}/complete`, {
+          method: "POST",
+        });
+      }
+      setEncounter(emptyEncounter);
+      setNotice(
+        shouldComplete
+          ? "Klinik qəbul imzalanaraq tamamlandı."
+          : "Klinik qəbul qaralama kimi saxlanıldı.",
+      );
+      await load();
+    } catch (c) {
+      setError(c instanceof Error ? c.message : "Klinik qəbul saxlanmadı.");
+    } finally {
+      setSavingEncounter(false);
+    }
+  }
+  async function completeEncounter(encounterId: string) {
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest(`/clinical-encounters/${encounterId}/complete`, {
+        method: "POST",
+      });
+      setNotice("Klinik qəbul imzalanaraq tamamlandı.");
+      await load();
+    } catch (c) {
+      setError(c instanceof Error ? c.message : "Klinik qəbul tamamlanmadı.");
+    }
+  }
   if (!id)
     return (
       <section className="ws-coming">
@@ -262,6 +330,7 @@ function ClinicalCard() {
         ))}
       </nav>
       {error && <div className="ws-alert ws-alert--danger">{error}</div>}
+      {notice && <div className="ws-alert ws-alert--success">{notice}</div>}
       {tab === "summary" && (
         <section className="pc-grid">
           <article className="ws-panel pc-section">
@@ -501,23 +570,106 @@ function ClinicalCard() {
         </section>
       )}
       {tab === "encounters" && (
-        <section className="ws-panel pc-section">
-          <p className="ws-eyebrow">Dəyişməz klinik tarixçə</p>
-          <h2>Klinik qəbullar</h2>
-          {data.clinicalEncounters.map((x) => (
-            <div className="pc-history" key={x.id}>
-              <i />
+        <div className="pc-grid">
+          <form className="ws-panel pc-form" onSubmit={saveEncounter}>
+            <header>
               <div>
-                <b>{x.diagnosis || "Qaralama klinik qeyd"}</b>
-                <span>
-                  {new Date(x.createdAt).toLocaleString("az-AZ")} ·{" "}
-                  {x.doctor.email}
-                </span>
+                <p className="ws-eyebrow">Yeni klinik qeyd</p>
+                <h2>Klinik qəbul</h2>
               </div>
-              <em>{x.status}</em>
+              <span>Həkim qeydi</span>
+            </header>
+            <div className="ws-form-grid">
+              <label>
+                Şikayət
+                <textarea
+                  value={encounter.complaint}
+                  onChange={(e) => setEncounter({ ...encounter, complaint: e.target.value })}
+                />
+              </label>
+              <label>
+                Müayinə nəticəsi
+                <textarea
+                  value={encounter.examination}
+                  onChange={(e) => setEncounter({ ...encounter, examination: e.target.value })}
+                />
+              </label>
+              <label className="ws-form-wide">
+                Diaqnoz
+                <input
+                  value={encounter.diagnosis}
+                  onChange={(e) => setEncounter({ ...encounter, diagnosis: e.target.value })}
+                  placeholder="Qəbulu tamamlamaq üçün diaqnoz vacibdir"
+                />
+              </label>
+              <label className="ws-form-wide">
+                Klinik qeyd
+                <textarea
+                  value={encounter.clinicalNotes}
+                  onChange={(e) => setEncounter({ ...encounter, clinicalNotes: e.target.value })}
+                />
+              </label>
+              <label>
+                Tövsiyələr
+                <textarea
+                  value={encounter.recommendations}
+                  onChange={(e) => setEncounter({ ...encounter, recommendations: e.target.value })}
+                />
+              </label>
+              <label>
+                Resept
+                <textarea
+                  value={encounter.prescription}
+                  onChange={(e) => setEncounter({ ...encounter, prescription: e.target.value })}
+                />
+              </label>
+              <label>
+                Növbəti qəbul
+                <input
+                  type="datetime-local"
+                  value={encounter.nextVisitAt}
+                  onChange={(e) => setEncounter({ ...encounter, nextVisitAt: e.target.value })}
+                />
+              </label>
+              <footer className="ws-form-wide">
+                <button className="ws-button" value="draft" disabled={savingEncounter}>
+                  Qaralama saxla
+                </button>
+                <button
+                  className="ws-button ws-button--primary"
+                  value="complete"
+                  disabled={savingEncounter || !encounter.diagnosis.trim()}
+                >
+                  {savingEncounter ? "Saxlanılır..." : "İmzala və tamamla"}
+                </button>
+              </footer>
             </div>
-          ))}
-        </section>
+          </form>
+          <section className="ws-panel pc-section">
+            <p className="ws-eyebrow">Dəyişməz klinik tarixçə</p>
+            <h2>Klinik qəbullar</h2>
+            {data.clinicalEncounters.length ? data.clinicalEncounters.map((x) => (
+              <div className="pc-history" key={x.id}>
+                <i />
+                <div>
+                  <b>{x.diagnosis || "Qaralama klinik qeyd"}</b>
+                  <span>
+                    {new Date(x.createdAt).toLocaleString("az-AZ")} ·{" "}
+                    {x.doctor.email}
+                  </span>
+                </div>
+                <em>{encounterStatus[x.status] ?? x.status}</em>
+                {x.status === "DRAFT" && x.diagnosis && (
+                  <button className="ws-row-action" onClick={() => void completeEncounter(x.id)}>
+                    Tamamla
+                  </button>
+                )}
+              </div>
+            )) : (
+              <div className="ws-empty"><span>Klinik qəbul yoxdur.</span></div>
+            )}
+          </section>
+        </div>
       )}
     </>
   );

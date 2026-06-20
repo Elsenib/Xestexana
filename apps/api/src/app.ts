@@ -24,6 +24,7 @@ import { paymesRoutes } from "./routes/paymes.js";
 import { subscriptionRoutes } from "./routes/subscription.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { clinicalCoreRoutes } from "./routes/clinical-core.js";
+import { dashboardRoutes } from "./routes/dashboard.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,6 +126,7 @@ export function buildApp() {
   app.register(taskRoutes, { prefix: "/api" });
   app.register(observabilityRoutes, { prefix: "/api" });
   app.register(clinicalCoreRoutes, { prefix: "/api" });
+  app.register(dashboardRoutes, { prefix: "/api" });
 
   return app;
 }

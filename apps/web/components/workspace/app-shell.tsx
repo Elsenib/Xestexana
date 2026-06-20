@@ -7,57 +7,9 @@ import {
   apiRequest,
   CurrentUser,
   roleLabel,
-  StaffRole,
   TOKEN_KEY,
 } from "../../lib/lovelydent-api";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: string;
-  roles?: StaffRole[];
-};
-const clinical: StaffRole[] = [
-  "SUPER_ADMIN",
-  "ADMIN",
-  "CALL_CENTER",
-  "DOCTOR",
-  "NURSE",
-];
-const navigation: NavItem[] = [
-  { href: "/dashboard", label: "İş masası", icon: "⌂" },
-  {
-    href: "/appointments",
-    label: "Təqvim və qəbullar",
-    icon: "□",
-    roles: clinical,
-  },
-  { href: "/patients", label: "Pasiyentlər", icon: "♙", roles: clinical },
-  {
-    href: "/clinical",
-    label: "Klinik iş",
-    icon: "+",
-    roles: ["SUPER_ADMIN", "ADMIN", "DOCTOR", "NURSE"],
-  },
-  {
-    href: "/finance",
-    label: "Kassa və maliyyə",
-    icon: "₼",
-    roles: ["SUPER_ADMIN", "ADMIN", "CASHIER", "ACCOUNTANT", "MANAGEMENT"],
-  },
-  {
-    href: "/inventory",
-    label: "Anbar",
-    icon: "◇",
-    roles: ["SUPER_ADMIN", "ADMIN", "INVENTORY_MANAGER"],
-  },
-  {
-    href: "/reports",
-    label: "Hesabatlar",
-    icon: "⌁",
-    roles: ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT", "MANAGEMENT"],
-  },
-];
+import { canAccessRoute, navigation } from "../../lib/role-access";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -70,13 +22,25 @@ export function AppShell({ children }: { children: ReactNode }) {
       return;
     }
     apiRequest<CurrentUser>("/auth/me")
-      .then(setUser)
+      .then((currentUser) => {
+        if (currentUser.role === "PATIENT") {
+          localStorage.removeItem(TOKEN_KEY);
+          router.replace("/");
+          return;
+        }
+        setUser(currentUser);
+      })
       .catch(() => {
         localStorage.removeItem(TOKEN_KEY);
         router.replace("/");
       })
       .finally(() => setReady(true));
   }, [router]);
+  useEffect(() => {
+    if (user && pathname && !canAccessRoute(user.role, pathname)) {
+      router.replace("/dashboard");
+    }
+  }, [pathname, router, user]);
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     router.replace("/");
@@ -88,9 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <p>İş məkanı hazırlanır...</p>
       </div>
     );
-  const visible = navigation.filter(
-    (item) => !item.roles || item.roles.includes(user.role),
-  );
+  const visible = navigation.filter((item) => item.roles.includes(user.role));
   return (
     <div className="ws-app">
       <aside className="ws-sidebar">

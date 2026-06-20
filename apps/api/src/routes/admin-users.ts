@@ -3,15 +3,17 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 const listQuerySchema = z.object({
-  role: z.enum(["ADMIN", "DOCTOR", "NURSE", "PATIENT", "CALL_CENTER"]).optional(),
+  role: z.enum(["ADMIN", "DOCTOR", "NURSE", "CALL_CENTER", "CASHIER", "INVENTORY_MANAGER", "ACCOUNTANT", "MANAGEMENT"]).optional(),
   take: z.coerce.number().int().min(1).max(200).default(50)
 });
 
 const createAdminSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  role: z.enum(["ADMIN", "CALL_CENTER", "NURSE"]).default("ADMIN")
+  role: z.enum(["ADMIN", "CALL_CENTER", "NURSE", "CASHIER", "INVENTORY_MANAGER", "ACCOUNTANT", "MANAGEMENT"]).default("CALL_CENTER")
 });
+
+const statusSchema = z.object({ active: z.boolean() });
 
 export async function adminUserRoutes(app: FastifyInstance) {
   app.get(
@@ -76,6 +78,27 @@ export async function adminUserRoutes(app: FastifyInstance) {
     }
   );
 
+  app.patch(
+    "/admin-users/:id/status",
+    { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { active } = statusSchema.parse(request.body);
+      if (id === request.user.sub && !active) {
+        return reply.code(400).send({ message: "Öz hesabınızı deaktiv edə bilməzsiniz." });
+      }
+      const user = await app.prisma.user.findFirst({
+        where: { id, clinicId: request.user.clinicId, role: { notIn: ["SUPER_ADMIN", "PATIENT"] } },
+      });
+      if (!user) return reply.code(404).send({ message: "İstifadəçi tapılmadı." });
+      return app.prisma.user.update({
+        where: { id },
+        data: { active },
+        select: { id: true, email: true, role: true, active: true, createdAt: true },
+      });
+    }
+  );
+
   app.delete(
     "/admin-users/:id",
     { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
@@ -88,7 +111,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
       const user = await app.prisma.user.findUnique({ where: { id } });
       if (!user) return reply.code(404).send({ message: "Istifadeci tapilmadi." });
 
-      if (!["ADMIN", "CALL_CENTER", "NURSE"].includes(user.role)) {
+      if (["SUPER_ADMIN", "PATIENT"].includes(user.role)) {
         return reply.code(400).send({
           message: "Klinik istifadəçisini onun xüsusi bölməsindən silin."
         });
@@ -99,7 +122,8 @@ export async function adminUserRoutes(app: FastifyInstance) {
         return reply.code(403).send({ message: "Bu əməliyyat üçün icazəniz yoxdur." });
       }
 
-      await app.prisma.user.delete({ where: { id } });
+      // Tibbi sistemdə istifadəçi əlaqələri fiziki silinmir; hesab arxivlənir.
+      await app.prisma.user.update({ where: { id }, data: { active: false } });
       return reply.code(204).send();
     }
   );

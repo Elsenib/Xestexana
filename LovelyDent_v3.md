@@ -724,16 +724,22 @@ Funksiya yalnız aşağıdakılar tamamlandıqda hazır sayılır:
 
 ## 20. İlk development backlog sırası
 
-1. Klinika, filial və istifadəçi modeli.
-2. Authentication, permission və audit təməli.
-3. Pasiyent və anamnez.
-4. Həkim qrafiki və randevu təqvimi.
-5. Odontogram və klinik qəbul.
-6. Müalicə planı və xidmət kataloqu.
-7. Pasiyent hesabı, ödəniş və kassa növbəsi.
-8. Avtomatik hesablama mühərriki, ledger-lər və period bağlanması.
-9. Fayl storage və sənədlər.
-10. Bildiriş queue-su və randevu xatırlatması.
-11. Mənbə əməliyyata qədər açıla bilən avtomatik dashboard və hesabatlar.
+İzləmə işarələri: `✅ hazır`, `🟡 qismən hazır`, `⬜ başlanmayıb`.
+
+1. 🟡 Klinika, filial və istifadəçi modeli — klinika və istifadəçi modeli var; ayrıca filial modeli tamamlanmalıdır.
+2. 🟡 Authentication, permission və audit təməli — giriş, rol üzrə qorunan menyu/marşrut, server dashboard səlahiyyəti və klinika heyəti idarəetməsi işləyir; detallı permission və dəyişdirilməz audit jurnalı tamamlanmalıdır.
+3. ✅ Pasiyent və anamnez — pasiyent reyestri, klinik kart və versiyalanan anamnez işləyir.
+4. 🟡 Həkim qrafiki və randevu təqvimi — qrafik, uyğun vaxt və status axını var; həftəlik vizual təqvim genişləndirilməlidir.
+5. 🟡 Odontogram və klinik qəbul — versiyalanan odontogram, anamnez, klinik qəbulun qaralama və imzalanmış tamamlanma axını işləyir; düzəliş və müalicə planına keçid tamamlanmalıdır.
+6. ⬜ Müalicə planı və xidmət kataloqu.
+7. 🟡 Pasiyent hesabı, ödəniş və kassa növbəsi — ilkin maliyyə ekranı var; real hesab və kassa modeli qurulmalıdır.
+8. ⬜ Avtomatik hesablama mühərriki, ledger-lər və period bağlanması.
+9. ⬜ Fayl storage və sənədlər.
+10. ⬜ Bildiriş queue-su və randevu xatırlatması.
+11. 🟡 Mənbə əməliyyata qədər açıla bilən avtomatik dashboard və hesabatlar — ilkin əməliyyat göstəriciləri var; maliyyə drill-down-u ledger-dən sonra tamamlanacaq.
+
+Əlavə görülmüş iş: `✅` tapşırıq sistemi skeleti, `✅` rol əsaslı iş sahəsi, `✅` Railway API deploy və health yoxlaması.
+
+Rol məntiqi üzrə görülənlər: `✅` Super Admin sistem görünüşü, `✅` Klinik Admin heyət idarəetməsi, `✅` Rəhbərlik üçün yalnız hesabat görünüşü, `✅` qeydiyyat/həkim/assistent/kassir/anbar/mühasib üçün məsuliyyətə uyğun menyu və dashboard.
 
 Hər backlog elementi ayrıca user story, biznes qaydası, ekran axını və acceptance criteria ilə development üçün hazırlanmalıdır.

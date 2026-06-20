@@ -1,105 +1,123 @@
 "use client";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { apiRequest } from "../../../lib/lovelydent-api";
-type Patient = { id: string; fullName: string };
-type Appointment = {
-  id: string;
-  patientName?: string;
-  doctorName?: string;
-  startsAt: string;
-  status: string;
+import { apiRequest, StaffRole } from "../../../lib/lovelydent-api";
+import { roleWorkspace } from "../../../lib/role-access";
+
+type DashboardSummary = {
+  role: StaffRole;
+  metrics: Array<{ label: string; value: string; detail: string }>;
+  actions: Array<{ label: string; href: string }>;
+  appointments: Array<{
+    id: string;
+    patientName: string;
+    doctorName: string;
+    startsAt: string;
+    status: string;
+  }>;
 };
+
+const statusLabel: Record<string, string> = {
+  PENDING: "Gözləyir",
+  CONFIRMED: "Təsdiqlənib",
+  CHECKED_IN: "Pasiyent gəlib",
+  IN_TREATMENT: "Qəbulda",
+  COMPLETED: "Tamamlanıb",
+  CANCELED: "Ləğv edilib",
+  NO_SHOW: "Gəlməyib",
+};
+
 export default function DashboardPage() {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [error, setError] = useState("");
+
   useEffect(() => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    Promise.all([
-      apiRequest<Patient[]>("/patients?take=100"),
-      apiRequest<Appointment[]>(
-        `/appointments/availability?startDate=${encodeURIComponent(start.toISOString())}&endDate=${encodeURIComponent(end.toISOString())}`,
-      ),
-    ])
-      .then(([p, a]) => {
-        setPatients(p);
-        setAppointments(a);
-      })
-      .catch(() => {});
+    apiRequest<DashboardSummary>("/dashboard/summary")
+      .then(setSummary)
+      .catch((reason) =>
+        setError(reason instanceof Error ? reason.message : "İş masası yüklənmədi."),
+      );
   }, []);
+
+  if (error) return <div className="ws-alert ws-alert--danger">{error}</div>;
+  if (!summary)
+    return (
+      <div className="ws-empty">
+        <b>İş masası hazırlanır...</b>
+      </div>
+    );
+
+  const workspace = roleWorkspace[summary.role];
   return (
     <>
       <section className="ws-page-head">
         <div>
-          <p className="ws-eyebrow">Gündəlik əməliyyat görünüşü</p>
-          <h1>Sabahınız xeyir</h1>
-          <span>Bu gün klinikada diqqət tələb edən işlər burada görünür.</span>
+          <p className="ws-eyebrow">Rol əsaslı iş sahəsi</p>
+          <h1>{workspace.title}</h1>
+          <span>{workspace.description}</span>
         </div>
-        <Link className="ws-button ws-button--primary" href="/appointments">
-          + Yeni qəbul
-        </Link>
+        {summary.actions[0] && (
+          <Link className="ws-button ws-button--primary" href={summary.actions[0].href}>
+            {summary.actions[0].label}
+          </Link>
+        )}
       </section>
+
       <section className="ws-metrics">
-        <article>
-          <span>BUGÜNKÜ QƏBULLAR</span>
-          <strong>{appointments.length}</strong>
-          <small>Təqvim üzrə</small>
-        </article>
-        <article>
-          <span>PASİYENT BAZASI</span>
-          <strong>{patients.length}</strong>
-          <small>Son 100 qeyd</small>
-        </article>
-        <article>
-          <span>GÖZLƏYƏN TAPŞIRIQLAR</span>
-          <strong>—</strong>
-          <small>Tapşırıq axını hazırlanır</small>
-        </article>
+        {summary.metrics.map((metric) => (
+          <article key={metric.label}>
+            <span>{metric.label.toLocaleUpperCase("az-AZ")}</span>
+            <strong>{metric.value}</strong>
+            <small>{metric.detail}</small>
+          </article>
+        ))}
       </section>
+
       <section className="ws-dashboard-grid">
         <article className="ws-panel ws-today">
           <header>
             <div>
-              <p className="ws-eyebrow">Canlı qəbul axını</p>
-              <h2>Bu gün</h2>
+              <p className="ws-eyebrow">
+                {summary.appointments.length ? "Canlı qəbul axını" : "Səlahiyyətli görünüş"}
+              </p>
+              <h2>{summary.appointments.length ? "Bu gün" : "İş prioritetləri"}</h2>
             </div>
-            <Link href="/appointments">Tam təqvim →</Link>
           </header>
-          {appointments.length ? (
-            appointments.slice(0, 6).map((a) => (
-              <div className="ws-appointment-row" key={a.id}>
+          {summary.appointments.length ? (
+            summary.appointments.map((appointment) => (
+              <div className="ws-appointment-row" key={appointment.id}>
                 <time>
-                  {new Date(a.startsAt).toLocaleTimeString("az-AZ", {
+                  {new Date(appointment.startsAt).toLocaleTimeString("az-AZ", {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
                 </time>
                 <i />
                 <div>
-                  <b>{a.patientName ?? "Pasiyent"}</b>
-                  <span>{a.doctorName ?? "Həkim təyin edilməyib"}</span>
+                  <b>{appointment.patientName}</b>
+                  <span>{appointment.doctorName}</span>
                 </div>
-                <em>{a.status}</em>
+                <em>{statusLabel[appointment.status] ?? appointment.status}</em>
               </div>
             ))
           ) : (
             <div className="ws-empty">
-              <b>Bu gün üçün qəbul görünmür</b>
-              <span>Yeni qəbul yaradıldıqda iş axını burada görünəcək.</span>
+              <b>Məlumat rolunuza uyğun məhdudlaşdırılıb</b>
+              <span>Şəxsi tibbi məlumatlar yalnız əməliyyat işi olan rollara göstərilir.</span>
             </div>
           )}
         </article>
+
         <aside className="ws-panel ws-focus">
-          <p className="ws-eyebrow">Növbəti addım</p>
-          <h2>Klinik iş axını</h2>
-          <p>
-            Pasiyent kartı, anamnez və odontogramı eyni klinik kontekstdə
-            birləşdirəcəyik.
-          </p>
-          <Link href="/patients">Pasiyentlərə keç →</Link>
+          <p className="ws-eyebrow">Sürətli keçidlər</p>
+          <h2>İş axını</h2>
+          <p>Yalnız bu rolun məsuliyyətinə aid modullar aktivdir.</p>
+          {summary.actions.map((action) => (
+            <Link key={action.href} href={action.href}>
+              {action.label} →
+            </Link>
+          ))}
         </aside>
       </section>
     </>
