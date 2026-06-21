@@ -743,3 +743,11 @@ Funksiya yalnız aşağıdakılar tamamlandıqda hazır sayılır:
 Rol məntiqi üzrə görülənlər: `✅` Super Admin bütün klinika-admin səlahiyyətlərini və sistem görünüşünü miras alır, `✅` Klinik Admin heyət idarəetməsi, `✅` Rəhbərlik üçün məxfi pasiyent detalları olmadan aqreqat hesabat görünüşü, `✅` qeydiyyat/həkim/assistent/kassir/anbar/mühasib üçün məsuliyyətə uyğun menyu və server icazələri.
 
 Hər backlog elementi ayrıca user story, biznes qaydası, ekran axını və acceptance criteria ilə development üçün hazırlanmalıdır.
+
+
+
+#### rollarin isleri
+İcra vəziyyəti: 🟡 Ümumi rəhbər təsdiqi mühərriki işləyir. Anbar məsulu/Admin əməliyyatı Super Adminə, assistent stok sərfi isə həkimə düşür; yalnız təsdiqdən sonra stok ledger-i avtomatik yenilənir. Eyni mexanizm maliyyə və klinik dəyişikliklərə genişləndirilir.
+
+- mentiqi duzgun qurmaq lazimdi. super admin icaze veren sexsdi. ondan sonra gelen rollar 
+ne edirse super adminin yekun icazesi ile edir. meselen admin hesabat isi gorur deyisiklik edende superadminin ekranina dusur super admin icaze verir ve ya vermir. super adminin icazesi olmadan hec bir deyisiklik edilmir. yada hekim asistani bir is gorur bu hekimin ekranina dusur hekim icaze verir ve ya vermir. mentiq beledi her bir rolun bir ustu onun rehberi sayilir. meselen anbarda deyisiklik olacaq anbar rolu deyisikliyi edir super adminin ekranina dusur ancaq heleki sadece ekranda gorsenir icaze verib vermemek kimi bir funksiyasi yoxdur. anbarda men bir mehsul yerlesdirdim. sonra bir miqdarini geri qaytarma etdim. sisteme bu dusdu. ancaq super admin tesdiqlemelidi ve anbarda o mehsuldan cixarilan miqdar avtomatik hesablanib anbar bilgisi yenilenmelidi. manuel hesablama hecbir yerde olmayacaq. her sey avtomatik olacaq. meselen hekim proseduru bitirdi. sistem avtomatik olaraq pasiyentin hesabina borc yazir. hekim faizi avtomatik hesablanir. kassir o borcu alir. sistem avtomatik olaraq pasiyentin borcunu azaldir, kassa qaligini artirir, hekim faizini yenileyir ve qebz yaradir. bu kimi her bir proses avtomatik olacaq. manual intervention olmayacaq. 

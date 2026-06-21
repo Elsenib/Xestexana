@@ -9,7 +9,8 @@ export type WorkspaceRoute =
   | "/finance"
   | "/inventory"
   | "/reports"
-  | "/administration";
+  | "/administration"
+  | "/approvals";
 
 export type NavigationItem = {
   href: WorkspaceRoute;
@@ -79,6 +80,12 @@ export const navigation: NavigationItem[] = [
     label: "Klinika idarəetməsi",
     icon: "⚙",
     roles: ["SUPER_ADMIN", "ADMIN"],
+  },
+  {
+    href: "/approvals",
+    label: "Təsdiq gözləyənlər",
+    icon: "✓",
+    roles: ["SUPER_ADMIN", "ADMIN", "DOCTOR"],
   },
 ];
 

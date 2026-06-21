@@ -42,6 +42,7 @@ model Clinic {
   services Service[]
   treatmentPlans TreatmentPlan[]
   treatmentPlanVersions TreatmentPlanVersion[]
+  approvalRequests ApprovalRequest[]
 
   @@index([active])
   @@index([subscriptionStatus])
@@ -68,6 +69,8 @@ model User {
   stockMovements StockMovement[] @relation("StockMovementAuthor")
   treatmentPlans TreatmentPlan[] @relation("TreatmentPlanDoctor")
   treatmentPlanVersions TreatmentPlanVersion[] @relation("TreatmentPlanVersionAuthor")
+  requestedApprovals ApprovalRequest[] @relation("ApprovalRequester")
+  reviewedApprovals ApprovalRequest[] @relation("ApprovalReviewer")
 
   @@index([clinicId, role])
 }
@@ -400,4 +403,29 @@ model TreatmentPlanItem {
 
   @@index([treatmentPlanVersionId])
   @@index([serviceId])
+}
+
+
+model ApprovalRequest {
+  id                String    @id @default(cuid())
+  clinicId          String
+  requestedByUserId String
+  reviewerRole      String
+  actionType        String
+  entityType        String
+  entityId          String?
+  payload           Json
+  status            String    @default("PENDING")
+  reviewNote        String?
+  reviewedByUserId  String?
+  reviewedAt        DateTime?
+  appliedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  clinic            Clinic    @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  requestedBy       User      @relation("ApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy        User?     @relation("ApprovalReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, reviewerRole, status, createdAt])
+  @@index([clinicId, requestedByUserId, status])
 }

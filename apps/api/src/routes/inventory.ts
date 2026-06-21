@@ -136,6 +136,25 @@ export async function inventoryRoutes(app: FastifyInstance) {
       if (request.user.role === "NURSE" && !["CONSUMPTION", "RETURN"].includes(body.type)) {
         return reply.code(403).send({ message: "Assistent yalnız material sərfi və geri qaytarmanı qeyd edə bilər." });
       }
+      if (request.user.role !== "SUPER_ADMIN") {
+        const reviewerRole = request.user.role === "NURSE" ? "DOCTOR" : "SUPER_ADMIN";
+        const approval = await app.prisma.approvalRequest.create({
+          data: {
+            clinicId: request.user.clinicId,
+            requestedByUserId: userId,
+            reviewerRole,
+            actionType: "STOCK_MOVEMENT",
+            entityType: "Product",
+            entityId: body.productId,
+            payload: body,
+          },
+        });
+        return reply.code(202).send({
+          approvalId: approval.id,
+          status: approval.status,
+          message: reviewerRole === "DOCTOR" ? "Həkim təsdiqi gözlənilir." : "Super Admin təsdiqi gözlənilir.",
+        });
+      }
 
       try {
         const result = await app.prisma.$transaction(async (tx) => {

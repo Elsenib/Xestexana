@@ -81,12 +81,12 @@ export default function InventoryPage() {
     event.preventDefault();
     setError(""); setNotice("");
     try {
-      await apiRequest("/inventory/movements", {
+      const result = await apiRequest<{ message?: string }>("/inventory/movements", {
         method: "POST",
         body: JSON.stringify({ ...movementForm, quantity: Number(movementForm.quantity), reference: movementForm.reference || null }),
       });
       setMovementForm((value) => ({ ...value, quantity: "1", reason: "", reference: "" }));
-      setNotice("Stok hərəkəti qeydə alındı.");
+      setNotice(result.message ?? "Stok hərəkəti qeydə alındı və avtomatik tətbiq edildi.");
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Stok hərəkəti qeydə alınmadı.");
