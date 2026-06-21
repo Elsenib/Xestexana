@@ -731,7 +731,7 @@ Funksiya yalnız aşağıdakılar tamamlandıqda hazır sayılır:
 3. ✅ Pasiyent və anamnez — pasiyent reyestri, klinik kart və versiyalanan anamnez işləyir.
 4. 🟡 Həkim qrafiki və randevu təqvimi — qrafik, uyğun vaxt və status axını var; həftəlik vizual təqvim genişləndirilməlidir.
 5. 🟡 Odontogram və klinik qəbul — versiyalanan odontogram, anamnez, klinik qəbulun qaralama və imzalanmış tamamlanma axını işləyir; düzəliş və müalicə planına keçid tamamlanmalıdır.
-6. ⬜ Müalicə planı və xidmət kataloqu.
+6. 🟡 Müalicə planı və xidmət kataloqu — xidmət/qiymət kataloqu, plan sətirləri, diş və miqdar, endirim, serverdə sabitlənən qiymət, plan versiyası və status axını işləyir; razılıq sənədi və plan sətrinin prosedura çevrilməsi qalır.
 7. 🟡 Pasiyent hesabı, ödəniş və kassa növbəsi — ilkin maliyyə ekranı var; real hesab və kassa modeli qurulmalıdır.
 8. ⬜ Avtomatik hesablama mühərriki, ledger-lər və period bağlanması.
 9. ⬜ Fayl storage və sənədlər.

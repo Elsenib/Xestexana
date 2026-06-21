@@ -5,6 +5,7 @@ export type WorkspaceRoute =
   | "/appointments"
   | "/patients"
   | "/clinical"
+  | "/treatments"
   | "/finance"
   | "/inventory"
   | "/reports"
@@ -48,6 +49,12 @@ export const navigation: NavigationItem[] = [
     label: "Klinik iş",
     icon: "+",
     roles: ["SUPER_ADMIN", "DOCTOR", "NURSE"],
+  },
+  {
+    href: "/treatments",
+    label: "Müalicə planları",
+    icon: "◫",
+    roles: ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
   },
   {
     href: "/finance",

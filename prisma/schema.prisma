@@ -39,6 +39,9 @@ model Clinic {
   clinicalEncounterRevisions ClinicalEncounterRevision[]
   products     Product[]
   stockMovements StockMovement[]
+  services Service[]
+  treatmentPlans TreatmentPlan[]
+  treatmentPlanVersions TreatmentPlanVersion[]
 
   @@index([active])
   @@index([subscriptionStatus])
@@ -63,6 +66,8 @@ model User {
   doctorEncounters ClinicalEncounter[] @relation("EncounterDoctor")
   encounterRevisions ClinicalEncounterRevision[] @relation("EncounterRevisionAuthor")
   stockMovements StockMovement[] @relation("StockMovementAuthor")
+  treatmentPlans TreatmentPlan[] @relation("TreatmentPlanDoctor")
+  treatmentPlanVersions TreatmentPlanVersion[] @relation("TreatmentPlanVersionAuthor")
 
   @@index([clinicId, role])
 }
@@ -113,6 +118,7 @@ model PatientProfile {
   anamnesisVersions  PatientAnamnesisVersion[]
   odontogramSnapshots OdontogramSnapshot[]
   clinicalEncounters ClinicalEncounter[]
+  treatmentPlans TreatmentPlan[]
 
   @@index([clinicId, lastName, firstName])
   @@unique([clinicId, identityNumber])
@@ -323,4 +329,75 @@ model StockMovement {
 
   @@index([clinicId, productId, createdAt])
   @@index([clinicId, type, createdAt])
+}
+
+
+model Service {
+  id              String              @id @default(cuid())
+  clinicId        String
+  code            String
+  name            String
+  category        String
+  price           Decimal             @db.Decimal(14, 2)
+  durationMinutes Int                 @default(30)
+  active          Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  clinic          Clinic              @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  treatmentItems  TreatmentPlanItem[]
+
+  @@unique([clinicId, code])
+  @@index([clinicId, active, category])
+}
+
+model TreatmentPlan {
+  id             String                 @id @default(cuid())
+  clinicId       String
+  patientId      String
+  doctorUserId   String
+  title          String
+  status         String                 @default("DRAFT")
+  currentVersion Int                    @default(1)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  clinic         Clinic                 @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient        PatientProfile         @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor         User                   @relation("TreatmentPlanDoctor", fields: [doctorUserId], references: [id], onDelete: Restrict)
+  versions       TreatmentPlanVersion[]
+
+  @@index([clinicId, patientId, createdAt])
+  @@index([clinicId, status, updatedAt])
+}
+
+model TreatmentPlanVersion {
+  id              String              @id @default(cuid())
+  clinicId        String
+  treatmentPlanId String
+  version         Int
+  discount        Decimal             @default(0) @db.Decimal(14, 2)
+  note            String?
+  createdByUserId String
+  createdAt       DateTime            @default(now())
+  clinic          Clinic              @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  treatmentPlan   TreatmentPlan       @relation(fields: [treatmentPlanId], references: [id], onDelete: Restrict)
+  createdBy       User                @relation("TreatmentPlanVersionAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  items           TreatmentPlanItem[]
+
+  @@unique([treatmentPlanId, version])
+  @@index([clinicId, treatmentPlanId, createdAt])
+}
+
+model TreatmentPlanItem {
+  id                     String               @id @default(cuid())
+  treatmentPlanVersionId String
+  serviceId              String
+  tooth                  String?
+  quantity               Decimal              @default(1) @db.Decimal(14, 3)
+  unitPrice              Decimal              @db.Decimal(14, 2)
+  status                 String               @default("PLANNED")
+  treatmentPlanVersion   TreatmentPlanVersion @relation(fields: [treatmentPlanVersionId], references: [id], onDelete: Restrict)
+  service                Service              @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@index([treatmentPlanVersionId])
+  @@index([serviceId])
 }

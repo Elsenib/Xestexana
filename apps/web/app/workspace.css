@@ -815,3 +815,45 @@
   }
 }
 .ws-clinical-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.65fr);gap:22px}.ws-clinical-note{font-size:12px;line-height:1.8;color:var(--ws-muted);margin:0 0 22px}@media(max-width:1050px){.ws-clinical-grid{grid-template-columns:1fr}}
+.ws-route-progress {
+  position: fixed;
+  z-index: 100;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(18, 112, 99, 0.14);
+}
+
+.ws-route-progress::after {
+  content: "";
+  display: block;
+  width: 36%;
+  height: 100%;
+  background: #127063;
+  animation: ws-route-progress 0.85s ease-in-out infinite;
+}
+
+.ws-route-loading {
+  min-height: 38vh;
+  gap: 12px;
+}
+
+.ws-route-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(18, 112, 99, 0.18);
+  border-top-color: #127063;
+  border-radius: 50%;
+  animation: ws-spin 0.65s linear infinite;
+}
+
+@keyframes ws-route-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(300%); }
+}
+
+@keyframes ws-spin {
+  to { transform: rotate(360deg); }
+}
