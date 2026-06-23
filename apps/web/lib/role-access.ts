@@ -5,6 +5,7 @@ export type WorkspaceRoute =
   | "/dashboard"
   | "/appointments"
   | "/patients"
+  | "/crm"
   | "/clinical"
   | "/treatments"
   | "/finance"
@@ -45,6 +46,12 @@ export const navigation: NavigationItem[] = [
     label: "Pasiyentlər",
     icon: "patients",
     roles: ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
+  },
+  {
+    href: "/crm",
+    label: "CRM / Recall",
+    icon: "crm",
+    roles: ["SUPER_ADMIN", "ADMIN", "CALL_CENTER"],
   },
   {
     href: "/clinical",

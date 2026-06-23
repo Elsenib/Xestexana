@@ -212,6 +212,7 @@ Alternativ: Ləğv edildi | Gəlmədi | Yenidən planlaşdırıldı
 - İcra edilmiş xidmət üçün zəmanət qaydası.
 - Zəmanətin başlanğıc, bitmə və istisna şərtləri.
 - Zəmanət hadisələrinin tarixçəsi.
+- sozu geden klinikanin hazirda istifade etdiyi zemanet kitabcasi var. musterilere kitabcani doldurub verirler. bu mentiqe uygun ne edilebilerse onu etmek lazimdi zemanet ucun.
 
 ### 6.12. Fayl, rentgen və sənədlər
 

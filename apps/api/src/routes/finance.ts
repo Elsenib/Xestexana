@@ -27,6 +27,7 @@ import {
 
 const financeRoles = ["SUPER_ADMIN", "ADMIN", "CASHIER", "ACCOUNTANT"] as const;
 const cashierRoles = ["SUPER_ADMIN", "ADMIN", "CASHIER"] as const;
+const receiptReaderRoles = [...financeRoles, "DOCTOR", "NURSE", "CALL_CENTER", "MANAGEMENT"] as const;
 
 const chargeLineSchema = z
   .object({
@@ -648,7 +649,7 @@ export async function financeRoutes(app: FastifyInstance) {
 
   app.get(
     "/finance/receipts/:entryId",
-    { preHandler: [app.authenticate, app.authorize([...financeRoles, "CASHIER"])] },
+    { preHandler: [app.authenticate, app.authorize([...receiptReaderRoles])] },
     async (request, reply) => {
       const { entryId } = z.object({ entryId: z.string().min(1) }).parse(request.params);
       const entry = await app.prisma.patientAccountEntry.findFirst({

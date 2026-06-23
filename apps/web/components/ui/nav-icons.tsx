@@ -4,6 +4,7 @@ export type NavIconId =
   | "dashboard"
   | "calendar"
   | "patients"
+  | "crm"
   | "clinical"
   | "treatments"
   | "finance"
@@ -35,6 +36,12 @@ const paths: Record<NavIconId, ReactNode> = {
     <>
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6" />
+    </>
+  ),
+  crm: (
+    <>
+      <path d="M5 5h14v10H8l-3 3V5Z" />
+      <path d="M8 9h8M8 12h5" />
     </>
   ),
   clinical: (

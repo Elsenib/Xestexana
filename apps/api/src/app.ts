@@ -24,6 +24,7 @@ import { paymesRoutes } from "./routes/paymes.js";
 import { subscriptionRoutes } from "./routes/subscription.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { clinicalCoreRoutes } from "./routes/clinical-core.js";
+import { crmRoutes } from "./routes/crm.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { treatmentPlanRoutes } from "./routes/treatment-plans.js";
@@ -61,7 +62,7 @@ export function buildApp() {
   const app = Fastify({
     logger: true,
     trustProxy: true,
-    bodyLimit: 1024 * 1024
+    bodyLimit: 10 * 1024 * 1024
   });
 
   const observability = new ObservabilityStore();
@@ -133,6 +134,7 @@ export function buildApp() {
   app.register(taskRoutes, { prefix: "/api" });
   app.register(observabilityRoutes, { prefix: "/api" });
   app.register(clinicalCoreRoutes, { prefix: "/api" });
+  app.register(crmRoutes, { prefix: "/api" });
   app.register(dashboardRoutes, { prefix: "/api" });
   app.register(inventoryRoutes, { prefix: "/api" });
   app.register(treatmentPlanRoutes, { prefix: "/api" });

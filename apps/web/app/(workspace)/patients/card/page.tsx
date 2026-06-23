@@ -3,7 +3,12 @@
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { apiRequest, downloadAuthenticatedFile, openAuthenticatedHtml } from "../../../../lib/lovelydent-api";
+import {
+  apiRequest,
+  downloadAuthenticatedFile,
+  fetchAuthenticatedBlobUrl,
+  openAuthenticatedHtml,
+} from "../../../../lib/lovelydent-api";
 
 type Anamnesis = {
   version: number;
@@ -140,6 +145,7 @@ type PatientFileRow = {
   createdAt: string;
   uploadedBy: string;
 };
+type FilePreview = { url: string; kind: "image" | "pdf" };
 
 function buildCharges(lines: ChargeLine[], services: Service[]) {
   return lines
@@ -164,6 +170,23 @@ async function postComplete(encounterId: string, charges: ReturnType<typeof buil
     },
   );
   return response;
+}
+
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Fayl oxuna bilmədi."));
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      const [, base64 = ""] = result.split(",");
+      if (!base64) {
+        reject(new Error("Fayl formatı oxuna bilmədi."));
+        return;
+      }
+      resolve(base64);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function ClinicalCard() {
@@ -196,6 +219,7 @@ function ClinicalCard() {
   const [accountBalance, setAccountBalance] = useState<number | null>(null);
   const [accountEntries, setAccountEntries] = useState<AccountEntry[]>([]);
   const [files, setFiles] = useState<PatientFileRow[]>([]);
+  const [filePreviews, setFilePreviews] = useState<Record<string, FilePreview>>({});
   const [uploadCategory, setUploadCategory] = useState("XRAY");
   async function load() {
     if (!id) return;
@@ -251,6 +275,47 @@ function ClinicalCard() {
     if (tab === "finance") void loadAccount().catch(() => undefined);
     if (tab === "files") void loadFiles().catch(() => undefined);
   }, [tab, id]);
+
+  useEffect(() => {
+    if (tab !== "files" || !id || !files.length) {
+      setFilePreviews((current) => {
+        Object.values(current).forEach((preview) => URL.revokeObjectURL(preview.url));
+        return {};
+      });
+      return;
+    }
+
+    let cancelled = false;
+    const previewable = files.filter((file) => file.mimeType.startsWith("image/") || file.mimeType === "application/pdf");
+
+    void Promise.all(
+      previewable.map(async (file) => {
+        const url = await fetchAuthenticatedBlobUrl(`/patients/${id}/files/${file.id}/download`);
+        return {
+          id: file.id,
+          preview: {
+            url,
+            kind: file.mimeType.startsWith("image/") ? "image" : "pdf",
+          } satisfies FilePreview,
+        };
+      }),
+    )
+      .then((items) => {
+        if (cancelled) {
+          items.forEach((item) => URL.revokeObjectURL(item.preview.url));
+          return;
+        }
+        setFilePreviews((current) => {
+          Object.values(current).forEach((preview) => URL.revokeObjectURL(preview.url));
+          return Object.fromEntries(items.map((item) => [item.id, item.preview]));
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, id, files]);
   const list = (value: string) =>
     value
       .split(",")
@@ -365,9 +430,8 @@ function ClinicalCard() {
     }
     setError("");
     setNotice("");
-    const buffer = await file.arrayBuffer();
-    const contentBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
     try {
+      const contentBase64 = await fileToBase64(file);
       await apiRequest(`/patients/${id}/files`, {
         method: "POST",
         body: JSON.stringify({
@@ -912,30 +976,53 @@ function ClinicalCard() {
             </footer>
           </form>
           {files.length ? (
-            <div className="ws-flow-list" style={{ padding: "0 20px 20px" }}>
-              {files.map((file) => (
-                <article className="ws-flow-card" key={file.id}>
-                  <time>{new Date(file.createdAt).toLocaleDateString("az-AZ")}</time>
-                  <div>
+            <div className="pc-file-grid">
+              {files.map((file) => {
+                const preview = filePreviews[file.id];
+                return (
+                <article className="pc-file-card" key={file.id}>
+                  <div className="pc-file-preview">
+                    {preview?.kind === "image" ? (
+                      <img src={preview.url} alt={file.originalName} />
+                    ) : preview?.kind === "pdf" ? (
+                      <iframe src={preview.url} title={file.originalName} />
+                    ) : (
+                      <span>{file.mimeType === "application/pdf" ? "PDF" : "FILE"}</span>
+                    )}
+                  </div>
+                  <div className="pc-file-meta">
+                    <time>{new Date(file.createdAt).toLocaleDateString("az-AZ")}</time>
                     <b>{file.originalName}</b>
                     <span>
                       {file.category} · {(file.sizeBytes / 1024).toFixed(0)} KB · {file.uploadedBy}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    className="ws-row-action"
-                    onClick={() =>
-                      void downloadAuthenticatedFile(
-                        `/patients/${id}/files/${file.id}/download`,
-                        file.originalName,
-                      )
-                    }
-                  >
-                    Bax
-                  </button>
+                  <footer>
+                    {preview && (
+                      <button
+                        type="button"
+                        className="ws-row-action"
+                        onClick={() => window.open(preview.url, "_blank")}
+                      >
+                        Aç
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="ws-row-action"
+                      onClick={() =>
+                        void downloadAuthenticatedFile(
+                          `/patients/${id}/files/${file.id}/download`,
+                          file.originalName,
+                        )
+                      }
+                    >
+                      Endir
+                    </button>
+                  </footer>
                 </article>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="ws-empty" style={{ padding: 20 }}>
