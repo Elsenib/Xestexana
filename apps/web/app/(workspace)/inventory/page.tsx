@@ -24,6 +24,8 @@ const movementLabels: Record<MovementType, string> = {
 const managerMovementTypes = Object.keys(movementLabels) as MovementType[];
 const nurseMovementTypes: MovementType[] = ["CONSUMPTION", "RETURN"];
 
+type MovementResponse = { message?: string; approvalId?: string; status?: string };
+
 export default function InventoryPage() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -32,6 +34,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [productForm, setProductForm] = useState({ name: "", category: "", sku: "", unit: "ədəd", minimumStock: "0", location: "" });
   const [movementForm, setMovementForm] = useState({ productId: "", type: "PURCHASE" as MovementType, quantity: "1", reason: "", reference: "" });
+  const [myPending, setMyPending] = useState<Array<{ id: string; actionType: string; createdAt: string; payload: Record<string, unknown> }>>([]);
 
   const canManage = user ? ["SUPER_ADMIN", "ADMIN", "INVENTORY_MANAGER"].includes(user.role) : false;
   const allowedMovementTypes = user?.role === "NURSE" ? nurseMovementTypes : managerMovementTypes;
@@ -46,12 +49,16 @@ export default function InventoryPage() {
     setLoading(true);
     setError("");
     try {
-      const [currentUser, rows] = await Promise.all([
+      const [currentUser, rows, pending] = await Promise.all([
         apiRequest<CurrentUser>("/auth/me"),
         apiRequest<Product[]>("/inventory/products"),
+        apiRequest<Array<{ id: string; actionType: string; createdAt: string; payload: Record<string, unknown> }>>(
+          "/approvals?status=PENDING&scope=mine",
+        ).catch(() => [] as Array<{ id: string; actionType: string; createdAt: string; payload: Record<string, unknown> }>),
       ]);
       setUser(currentUser);
       setProducts(rows);
+      setMyPending(pending.filter((row) => row.actionType === "STOCK_MOVEMENT"));
       if (!movementForm.productId && rows[0]) setMovementForm((value) => ({ ...value, productId: rows[0].id }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Anbar məlumatları yüklənmədi.");
@@ -81,12 +88,16 @@ export default function InventoryPage() {
     event.preventDefault();
     setError(""); setNotice("");
     try {
-      const result = await apiRequest<{ message?: string }>("/inventory/movements", {
+      const result = await apiRequest<MovementResponse>("/inventory/movements", {
         method: "POST",
         body: JSON.stringify({ ...movementForm, quantity: Number(movementForm.quantity), reference: movementForm.reference || null }),
       });
       setMovementForm((value) => ({ ...value, quantity: "1", reason: "", reference: "" }));
-      setNotice(result.message ?? "Stok hərəkəti qeydə alındı və avtomatik tətbiq edildi.");
+      setNotice(
+        result.approvalId
+          ? result.message ?? "Əməliyyat təsdiq gözləyir. Stok hələ dəyişməyib."
+          : result.message ?? "Stok hərəkəti qeydə alındı və avtomatik tətbiq edildi.",
+      );
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Stok hərəkəti qeydə alınmadı.");
@@ -100,6 +111,13 @@ export default function InventoryPage() {
       </section>
       {error && <div className="ws-alert ws-alert--danger">{error}</div>}
       {notice && <div className="ws-alert ws-alert--success">{notice}</div>}
+      {myPending.length > 0 && (
+        <section className="ws-panel pc-section ws-approval-banner">
+          <p className="ws-eyebrow">Təsdiq gözləyir</p>
+          <h2>{myPending.length} stok əməliyyatı hələ tətbiq olunmayıb</h2>
+          <span>Super Admin və ya həkim təsdiqləyənə qədər qalıq dəyişmir.</span>
+        </section>
+      )}
       <section className="ws-metrics">
         <article><span>AKTİV MATERİAL</span><strong>{products.filter((item) => item.active).length}</strong><small>Məhsul kartı</small></article>
         <article><span>KRİTİK STOK</span><strong>{critical.length}</strong><small>Minimum və aşağı</small></article>

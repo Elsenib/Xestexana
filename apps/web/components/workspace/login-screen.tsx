@@ -1,6 +1,8 @@
 "use client";
+
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandMark } from "../ui/brand-mark";
 import { apiRequest, CurrentUser, TOKEN_KEY } from "../../lib/lovelydent-api";
 export function LoginScreen() {
   const router = useRouter();
@@ -34,8 +36,11 @@ export function LoginScreen() {
     <main className="ws-login">
       <section className="ws-login-copy">
         <div className="ws-brand ws-brand--dark">
-          <span>LD</span>
-          <b>LovelyDent</b>
+          <BrandMark size={42} />
+          <div>
+            <b>LovelyDent</b>
+            <span>Dental klinika platforması</span>
+          </div>
         </div>
         <div>
           <p className="ws-eyebrow">Klinikanın gündəlik iş məkanı</p>

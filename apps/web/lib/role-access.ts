@@ -1,4 +1,5 @@
 import type { StaffRole } from "./lovelydent-api";
+import type { NavIconId } from "../components/ui/nav-icons";
 
 export type WorkspaceRoute =
   | "/dashboard"
@@ -15,7 +16,7 @@ export type WorkspaceRoute =
 export type NavigationItem = {
   href: WorkspaceRoute;
   label: string;
-  icon: string;
+  icon: NavIconId;
   roles: StaffRole[];
 };
 
@@ -32,59 +33,59 @@ const allStaff: StaffRole[] = [
 ];
 
 export const navigation: NavigationItem[] = [
-  { href: "/dashboard", label: "İş masası", icon: "⌂", roles: allStaff },
+  { href: "/dashboard", label: "İş masası", icon: "dashboard", roles: allStaff },
   {
     href: "/appointments",
     label: "Təqvim və qəbullar",
-    icon: "□",
+    icon: "calendar",
     roles: ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
   },
   {
     href: "/patients",
     label: "Pasiyentlər",
-    icon: "♙",
+    icon: "patients",
     roles: ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
   },
   {
     href: "/clinical",
     label: "Klinik iş",
-    icon: "+",
+    icon: "clinical",
     roles: ["SUPER_ADMIN", "DOCTOR", "NURSE"],
   },
   {
     href: "/treatments",
     label: "Müalicə planları",
-    icon: "◫",
+    icon: "treatments",
     roles: ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"],
   },
   {
     href: "/finance",
     label: "Kassa və maliyyə",
-    icon: "₼",
+    icon: "finance",
     roles: ["SUPER_ADMIN", "ADMIN", "CASHIER", "ACCOUNTANT"],
   },
   {
     href: "/inventory",
     label: "Anbar",
-    icon: "◇",
+    icon: "inventory",
     roles: ["SUPER_ADMIN", "ADMIN", "NURSE", "INVENTORY_MANAGER"],
   },
   {
     href: "/reports",
     label: "Hesabatlar",
-    icon: "⌁",
+    icon: "reports",
     roles: ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT", "MANAGEMENT"],
   },
   {
     href: "/administration",
     label: "Klinika idarəetməsi",
-    icon: "⚙",
+    icon: "administration",
     roles: ["SUPER_ADMIN", "ADMIN"],
   },
   {
     href: "/approvals",
     label: "Təsdiq gözləyənlər",
-    icon: "✓",
+    icon: "approvals",
     roles: ["SUPER_ADMIN", "ADMIN", "DOCTOR"],
   },
 ];

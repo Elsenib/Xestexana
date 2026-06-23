@@ -71,6 +71,7 @@ model User {
   treatmentPlanVersions TreatmentPlanVersion[] @relation("TreatmentPlanVersionAuthor")
   requestedApprovals ApprovalRequest[] @relation("ApprovalRequester")
   reviewedApprovals ApprovalRequest[] @relation("ApprovalReviewer")
+  targetedApprovals ApprovalRequest[] @relation("ApprovalTargetReviewer")
 
   @@index([clinicId, role])
 }
@@ -411,6 +412,7 @@ model ApprovalRequest {
   clinicId          String
   requestedByUserId String
   reviewerRole      String
+  reviewerUserId    String?
   actionType        String
   entityType        String
   entityId          String?
@@ -425,7 +427,9 @@ model ApprovalRequest {
   clinic            Clinic    @relation(fields: [clinicId], references: [id], onDelete: Restrict)
   requestedBy       User      @relation("ApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
   reviewedBy        User?     @relation("ApprovalReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  reviewerUser      User?     @relation("ApprovalTargetReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
 
   @@index([clinicId, reviewerRole, status, createdAt])
   @@index([clinicId, requestedByUserId, status])
+  @@index([clinicId, reviewerUserId, status])
 }

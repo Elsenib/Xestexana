@@ -1,5 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import {
+  APPROVAL_ACTIONS,
+  approvalStatusMessage,
+  createApprovalRequest,
+  needsApproval,
+} from "../services/approval-service.js";
 
 const patientParams = z.object({ id: z.string().min(1) });
 const encounterParams = z.object({ id: z.string().min(1) });
@@ -29,7 +35,11 @@ const encounterContent = z.object({
   recommendations: z.string().max(4000).nullable().optional(), prescription: z.string().max(4000).nullable().optional(),
   nextVisitAt: z.string().datetime().nullable().optional()
 });
-const createEncounterSchema = encounterContent.extend({ patientId: z.string().min(1), appointmentId: z.string().nullable().optional() });
+const createEncounterSchema = encounterContent.extend({
+  patientId: z.string().min(1),
+  appointmentId: z.string().nullable().optional(),
+  doctorUserId: z.string().min(1).optional(),
+});
 const amendEncounterSchema = encounterContent.extend({ reason: z.string().trim().min(5).max(1000) });
 
 export async function clinicalCoreRoutes(app: FastifyInstance) {
@@ -71,22 +81,70 @@ export async function clinicalCoreRoutes(app: FastifyInstance) {
     return reply.code(201).send(snapshot);
   });
 
-  app.post("/clinical-encounters", { preHandler: [app.authenticate, app.authorize(["ADMIN", "DOCTOR"])] }, async (request, reply) => {
-    const body = createEncounterSchema.parse(request.body); const userId = request.user.sub;
+  app.post("/clinical-encounters", { preHandler: [app.authenticate, app.authorize(["ADMIN", "DOCTOR", "NURSE"])] }, async (request, reply) => {
+    const body = createEncounterSchema.parse(request.body);
+    const userId = request.user.sub;
     if (!userId) return reply.code(401).send({ message: "Giriş tələb olunur." });
+
+    const doctorUserId =
+      request.user.role === "NURSE"
+        ? body.doctorUserId
+        : userId;
+    if (!doctorUserId) {
+      return reply.code(400).send({ message: "Assistent üçün məsul həkim seçilməlidir." });
+    }
+
+    const doctor = await app.prisma.user.findFirst({
+      where: { id: doctorUserId, clinicId: request.user.clinicId, role: "DOCTOR", active: true },
+      select: { id: true },
+    });
+    if (!doctor) return reply.code(400).send({ message: "Məsul həkim tapılmadı." });
+
     const patient = await app.prisma.patientProfile.findFirst({ where: { id: body.patientId, clinicId: request.user.clinicId }, select: { id: true } });
     if (!patient) return reply.code(404).send({ message: "Pasiyent tapılmadı." });
-    const encounter = await app.prisma.clinicalEncounter.create({ data: { ...body, nextVisitAt: body.nextVisitAt ? new Date(body.nextVisitAt) : null, clinicId: request.user.clinicId, doctorUserId: userId } });
+
+    const { doctorUserId: _ignored, ...encounterBody } = body;
+    const encounter = await app.prisma.clinicalEncounter.create({
+      data: {
+        ...encounterBody,
+        nextVisitAt: body.nextVisitAt ? new Date(body.nextVisitAt) : null,
+        clinicId: request.user.clinicId,
+        doctorUserId,
+      },
+    });
     return reply.code(201).send(encounter);
   });
 
-  app.post("/clinical-encounters/:id/complete", { preHandler: [app.authenticate, app.authorize(["ADMIN", "DOCTOR"])] }, async (request, reply) => {
+  app.post("/clinical-encounters/:id/complete", { preHandler: [app.authenticate, app.authorize(["ADMIN", "DOCTOR", "NURSE"])] }, async (request, reply) => {
     const { id } = encounterParams.parse(request.params);
+    const userId = request.user.sub!;
     const encounter = await app.prisma.clinicalEncounter.findFirst({ where: { id, clinicId: request.user.clinicId } });
     if (!encounter) return reply.code(404).send({ message: "Klinik qəbul tapılmadı." });
     if (encounter.status !== "DRAFT") return reply.code(409).send({ message: "Yalnız qaralama qəbul tamamlana bilər." });
     if (!encounter.diagnosis?.trim()) return reply.code(400).send({ message: "Tamamlamaq üçün diaqnoz daxil edilməlidir." });
-    return app.prisma.clinicalEncounter.update({ where: { id }, data: { status: "COMPLETED", signedAt: new Date(), completedAt: new Date() } });
+
+    if (needsApproval(request.user.role, APPROVAL_ACTIONS.CLINICAL_ENCOUNTER_COMPLETE)) {
+      const approval = await createApprovalRequest(app.prisma, {
+        clinicId: request.user.clinicId,
+        requestedByUserId: userId,
+        requesterRole: request.user.role,
+        actionType: APPROVAL_ACTIONS.CLINICAL_ENCOUNTER_COMPLETE,
+        entityType: "ClinicalEncounter",
+        entityId: id,
+        payload: { encounterId: id },
+        supervisingDoctorUserId: encounter.doctorUserId,
+      });
+      return reply.code(202).send({
+        approvalId: approval.id,
+        status: approval.status,
+        message: approvalStatusMessage(approval.reviewerRole, approval.reviewerUserId),
+      });
+    }
+
+    return app.prisma.clinicalEncounter.update({
+      where: { id },
+      data: { status: "COMPLETED", signedAt: new Date(), completedAt: new Date() },
+    });
   });
 
   app.post("/clinical-encounters/:id/amend", { preHandler: [app.authenticate, app.authorize(["ADMIN", "DOCTOR"])] }, async (request, reply) => {

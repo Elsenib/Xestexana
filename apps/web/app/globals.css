@@ -388,7 +388,7 @@ button.danger {
   border-radius: var(--r-sm);
 }
 .ghost-button:hover {
-  background: rgba(22, 18, 14, 0.05);
+  background: rgba(108, 102, 40, 0.05);
   box-shadow: none;
 }
 

@@ -1,6 +1,13 @@
 import { Prisma } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import {
+  APPROVAL_ACTIONS,
+  approvalStatusMessage,
+  createApprovalRequest,
+  shouldAutoApply,
+  stockMovementPayloadSchema,
+} from "../services/approval-service.js";
 
 const inventoryRoles = ["ADMIN", "INVENTORY_MANAGER", "NURSE"] as const;
 const managerRoles = ["ADMIN", "INVENTORY_MANAGER"] as const;
@@ -25,12 +32,11 @@ const productSchema = z.object({
   location: z.string().trim().max(120).nullable().optional(),
 });
 const productPatchSchema = productSchema.partial().extend({ active: z.boolean().optional() });
-const movementSchema = z.object({
-  productId: z.string().min(1),
-  type: z.enum(movementTypes),
+const movementSchema = stockMovementPayloadSchema.extend({
   quantity: z.coerce.number().positive().max(999999999),
   reason: z.string().trim().min(3).max(500),
   reference: z.string().trim().max(120).nullable().optional(),
+  supervisingDoctorUserId: z.string().min(1).optional(),
 });
 const idParams = z.object({ id: z.string().min(1) });
 
@@ -136,30 +142,31 @@ export async function inventoryRoutes(app: FastifyInstance) {
       if (request.user.role === "NURSE" && !["CONSUMPTION", "RETURN"].includes(body.type)) {
         return reply.code(403).send({ message: "Assistent yalnız material sərfi və geri qaytarmanı qeyd edə bilər." });
       }
-      if (request.user.role !== "SUPER_ADMIN") {
-        const reviewerRole = request.user.role === "NURSE" ? "DOCTOR" : "SUPER_ADMIN";
-        const approval = await app.prisma.approvalRequest.create({
-          data: {
-            clinicId: request.user.clinicId,
-            requestedByUserId: userId,
-            reviewerRole,
-            actionType: "STOCK_MOVEMENT",
-            entityType: "Product",
-            entityId: body.productId,
-            payload: body,
-          },
+
+      const { supervisingDoctorUserId, ...movement } = body;
+
+      if (!shouldAutoApply(request.user.role)) {
+        const approval = await createApprovalRequest(app.prisma, {
+          clinicId: request.user.clinicId,
+          requestedByUserId: userId,
+          requesterRole: request.user.role,
+          actionType: APPROVAL_ACTIONS.STOCK_MOVEMENT,
+          entityType: "Product",
+          entityId: movement.productId,
+          payload: movement,
+          supervisingDoctorUserId,
         });
         return reply.code(202).send({
           approvalId: approval.id,
           status: approval.status,
-          message: reviewerRole === "DOCTOR" ? "Həkim təsdiqi gözlənilir." : "Super Admin təsdiqi gözlənilir.",
+          message: approvalStatusMessage(approval.reviewerRole, approval.reviewerUserId),
         });
       }
 
       try {
         const result = await app.prisma.$transaction(async (tx) => {
           const product = await tx.product.findFirst({
-            where: { id: body.productId, clinicId: request.user.clinicId, active: true },
+            where: { id: movement.productId, clinicId: request.user.clinicId, active: true },
           });
           if (!product) return { error: "NOT_FOUND" as const };
           const movements = await tx.stockMovement.findMany({
@@ -167,26 +174,26 @@ export async function inventoryRoutes(app: FastifyInstance) {
             select: { type: true, quantity: true },
           });
           const balance = movements.reduce(
-            (sum, movement) => sum + signedQuantity(movement.type, movement.quantity),
+            (sum, row) => sum + signedQuantity(row.type, row.quantity),
             0,
           );
-          if (!incoming.has(body.type) && balance < body.quantity) {
+          if (!incoming.has(movement.type) && balance < movement.quantity) {
             return { error: "INSUFFICIENT" as const, balance };
           }
-          const movement = await tx.stockMovement.create({
+          const created = await tx.stockMovement.create({
             data: {
               clinicId: request.user.clinicId,
               productId: product.id,
-              type: body.type,
-              quantity: body.quantity,
-              reason: body.reason,
-              reference: body.reference,
+              type: movement.type,
+              quantity: movement.quantity,
+              reason: movement.reason,
+              reference: movement.reference,
               createdByUserId: userId,
             },
           });
           return {
-            movement: { ...movement, quantity: movement.quantity.toNumber() },
-            balance: balance + (incoming.has(body.type) ? body.quantity : -body.quantity),
+            movement: { ...created, quantity: created.quantity.toNumber() },
+            balance: balance + (incoming.has(movement.type) ? movement.quantity : -movement.quantity),
           };
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 

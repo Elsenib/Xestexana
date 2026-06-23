@@ -1,6 +1,12 @@
 import { Prisma } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import {
+  APPROVAL_ACTIONS,
+  approvalStatusMessage,
+  createApprovalRequest,
+  shouldAutoApply,
+} from "../services/approval-service.js";
 
 const clinicalReaders = ["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"] as const;
 const clinicalAuthors = ["ADMIN", "DOCTOR"] as const;
@@ -40,8 +46,23 @@ export async function treatmentPlanRoutes(app: FastifyInstance) {
     const rows = await app.prisma.service.findMany({ where: { clinicId: request.user.clinicId }, orderBy: [{ active: "desc" }, { category: "asc" }, { name: "asc" }] });
     return rows.map((row) => ({ ...row, price: row.price.toNumber() }));
   });
-  app.post("/services", { preHandler: [app.authenticate, app.authorize(["ADMIN"])] }, async (request, reply) => {
+  app.post("/services", { preHandler: [app.authenticate, app.authorize(["ADMIN", "SUPER_ADMIN"])] }, async (request, reply) => {
     const body = serviceSchema.parse(request.body);
+    if (!shouldAutoApply(request.user.role)) {
+      const approval = await createApprovalRequest(app.prisma, {
+        clinicId: request.user.clinicId,
+        requestedByUserId: request.user.sub!,
+        requesterRole: request.user.role,
+        actionType: APPROVAL_ACTIONS.SERVICE_UPSERT,
+        entityType: "Service",
+        payload: { mode: "create", data: body },
+      });
+      return reply.code(202).send({
+        approvalId: approval.id,
+        status: approval.status,
+        message: approvalStatusMessage(approval.reviewerRole, approval.reviewerUserId),
+      });
+    }
     try {
       const row = await app.prisma.service.create({ data: { ...body, clinicId: request.user.clinicId } });
       return reply.code(201).send({ ...row, price: row.price.toNumber() });
@@ -50,10 +71,26 @@ export async function treatmentPlanRoutes(app: FastifyInstance) {
       throw error;
     }
   });
-  app.patch("/services/:id", { preHandler: [app.authenticate, app.authorize(["ADMIN"])] }, async (request, reply) => {
+  app.patch("/services/:id", { preHandler: [app.authenticate, app.authorize(["ADMIN", "SUPER_ADMIN"])] }, async (request, reply) => {
     const { id } = idParams.parse(request.params); const body = servicePatchSchema.parse(request.body);
     const existing = await app.prisma.service.findFirst({ where: { id, clinicId: request.user.clinicId } });
     if (!existing) return reply.code(404).send({ message: "Xidmət tapılmadı." });
+    if (!shouldAutoApply(request.user.role)) {
+      const approval = await createApprovalRequest(app.prisma, {
+        clinicId: request.user.clinicId,
+        requestedByUserId: request.user.sub!,
+        requesterRole: request.user.role,
+        actionType: APPROVAL_ACTIONS.SERVICE_UPSERT,
+        entityType: "Service",
+        entityId: id,
+        payload: { mode: "update", serviceId: id, data: body },
+      });
+      return reply.code(202).send({
+        approvalId: approval.id,
+        status: approval.status,
+        message: approvalStatusMessage(approval.reviewerRole, approval.reviewerUserId),
+      });
+    }
     const row = await app.prisma.service.update({ where: { id }, data: body });
     return { ...row, price: row.price.toNumber() };
   });
