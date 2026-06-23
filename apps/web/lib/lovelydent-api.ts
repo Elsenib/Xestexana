@@ -28,19 +28,22 @@ export const roleLabel: Record<StaffRole, string> = {
   PATIENT: "Pasiyent",
 };
 
+async function responseMessage(response: Response, fallback: string) {
+  try {
+    return (await response.json())?.message ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
-  if (!response.ok) {
-    let message = "Sorğu uğursuz oldu.";
-    try {
-      message = (await response.json())?.message ?? message;
-    } catch {}
-    throw new Error(message);
-  }
+  if (!response.ok) throw new Error(await responseMessage(response, "Sorğu uğursuz oldu."));
   if (response.status === 204) return null as T;
   return response.json() as Promise<T>;
 }
@@ -48,7 +51,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 export async function openAuthenticatedHtml(path: string) {
   const popup = window.open("", "_blank");
   if (!popup) throw new Error("Popup bloklanıb.");
-  popup.document.write("<p style=\"font-family:system-ui,sans-serif;padding:24px\">Sənəd açılır...</p>");
+  popup.document.write('<p style="font-family:system-ui,sans-serif;padding:24px">Sənəd açılır...</p>');
 
   const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
   const response = await fetch(`${API_BASE}${path}`, {
@@ -56,10 +59,7 @@ export async function openAuthenticatedHtml(path: string) {
   });
 
   if (!response.ok) {
-    let message = "Sənəd açıla bilmədi.";
-    try {
-      message = (await response.json())?.message ?? message;
-    } catch {}
+    const message = await responseMessage(response, "Sənəd açıla bilmədi.");
     popup.document.body.innerHTML = "";
     const paragraph = popup.document.createElement("p");
     paragraph.style.fontFamily = "system-ui, sans-serif";
@@ -81,7 +81,8 @@ export async function downloadAuthenticatedFile(path: string, filename: string) 
   const response = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!response.ok) throw new Error("Fayl endirilə bilmədi.");
+  if (!response.ok) throw new Error(await responseMessage(response, "Fayl endirilə bilmədi."));
+
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -96,7 +97,8 @@ export async function fetchAuthenticatedBlobUrl(path: string) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!response.ok) throw new Error("Fayl açıla bilmədi.");
+  if (!response.ok) throw new Error(await responseMessage(response, "Fayl açıla bilmədi."));
+
   const blob = await response.blob();
   return URL.createObjectURL(blob);
 }

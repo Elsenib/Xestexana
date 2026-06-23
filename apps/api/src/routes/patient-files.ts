@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
+import { createHash } from "crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
@@ -26,6 +27,10 @@ function uploadsRoot() {
 
 function ensureDir(dir: string) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+}
+
+function safeOriginalName(name: string) {
+  return name.replace(/[^\w.\-() azəğıöüçşİƏĞÖÜÇŞ]+/gi, "_");
 }
 
 export async function patientFileRoutes(app: FastifyInstance) {
@@ -64,7 +69,8 @@ export async function patientFileRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { patientId } = z.object({ patientId: z.string().min(1) }).parse(request.params);
       const body = uploadSchema.parse(request.body);
-      const userId = request.user.sub!;
+      const userId = request.user.sub;
+      if (!userId) return reply.code(401).send({ message: "Giriş tələb olunur." });
 
       const patient = await app.prisma.patientProfile.findFirst({
         where: { id: patientId, clinicId: request.user.clinicId },
@@ -77,8 +83,10 @@ export async function patientFileRoutes(app: FastifyInstance) {
         return reply.code(413).send({ message: "Fayl 5 MB-dan böyük ola bilməz." });
       }
 
-      const safeName = body.originalName.replace(/[^\w.\-() azəğıöüçşİƏĞÖÜÇŞ]+/gi, "_");
-      const storageKey = `${request.user.clinicId}/${patientId}/${Date.now()}-${safeName}`;
+      const contentSha256 = createHash("sha256").update(buffer).digest("hex");
+      const storageKey = `${request.user.clinicId}/${patientId}/${Date.now()}-${safeOriginalName(body.originalName)}`;
+
+      // Local fallback saxlanır, amma əsas etibarlı mənbə DB-dəki content sahəsidir.
       const fullPath = path.join(uploadsRoot(), storageKey);
       ensureDir(path.dirname(fullPath));
       writeFileSync(fullPath, buffer);
@@ -92,6 +100,8 @@ export async function patientFileRoutes(app: FastifyInstance) {
           mimeType: body.mimeType,
           sizeBytes: buffer.length,
           storageKey,
+          content: buffer,
+          contentSha256,
           category: body.category,
         },
       });
@@ -104,7 +114,7 @@ export async function patientFileRoutes(app: FastifyInstance) {
         entityType: "PatientFile",
         entityId: file.id,
         summary: `Fayl yükləndi: ${body.originalName}`,
-        details: { patientId, category: body.category, sizeBytes: buffer.length },
+        details: { patientId, category: body.category, sizeBytes: buffer.length, contentSha256 },
       });
 
       return reply.code(201).send({ id: file.id, originalName: file.originalName });
@@ -126,7 +136,12 @@ export async function patientFileRoutes(app: FastifyInstance) {
       if (!file) return reply.code(404).send({ message: "Fayl tapılmadı." });
 
       const fullPath = path.join(uploadsRoot(), file.storageKey);
-      if (!existsSync(fullPath)) return reply.code(404).send({ message: "Fayl anbarında tapılmadı." });
+      const data = file.content ?? (existsSync(fullPath) ? readFileSync(fullPath) : null);
+      if (!data) {
+        return reply.code(404).send({
+          message: "Fayl anbarında tapılmadı. Bu, köhnə local storage-də qalmış fayl ola bilər.",
+        });
+      }
 
       await recordAudit(app.prisma, {
         ...actorFromRequest(request),
@@ -139,7 +154,6 @@ export async function patientFileRoutes(app: FastifyInstance) {
         details: { patientId: params.patientId },
       });
 
-      const data = readFileSync(fullPath);
       return reply
         .header("Content-Type", file.mimeType)
         .header("Content-Disposition", `inline; filename="${file.originalName}"`)

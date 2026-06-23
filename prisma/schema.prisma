@@ -530,6 +530,8 @@ model PatientFile {
   mimeType         String
   sizeBytes        Int
   storageKey       String
+  content          Bytes?
+  contentSha256    String?
   category         String         @default("GENERAL")
   createdAt        DateTime       @default(now())
   clinic           Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict)
