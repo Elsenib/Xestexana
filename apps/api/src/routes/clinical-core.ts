@@ -63,6 +63,69 @@ const createEncounterSchema = encounterContent.extend({
 });
 const amendEncounterSchema = encounterContent.extend({ reason: z.string().trim().min(5).max(1000) });
 
+async function scheduleNextVisitRecall(
+  app: FastifyInstance,
+  params: {
+    clinicId: string;
+    patientId: string;
+    encounterId: string;
+    nextVisitAt: Date | null;
+    createdByUserId: string;
+  },
+) {
+  if (!params.nextVisitAt || params.nextVisitAt <= new Date()) return;
+
+  const patient = await app.prisma.patientProfile.findFirst({
+    where: { id: params.patientId, clinicId: params.clinicId },
+    select: { firstName: true, lastName: true, phone: true, identityNumber: true },
+  });
+  if (!patient) return;
+
+  const duplicate = await app.prisma.task.findFirst({
+    where: {
+      clinicId: params.clinicId,
+      title: { startsWith: "CRM recall" },
+      description: { contains: params.encounterId },
+      active: true,
+      status: { in: ["PENDING", "IN_PROGRESS"] },
+    },
+    select: { id: true },
+  });
+  if (duplicate) return;
+
+  const assignee = await app.prisma.user.findFirst({
+    where: {
+      clinicId: params.clinicId,
+      active: true,
+      role: { in: ["CALL_CENTER", "ADMIN"] },
+    },
+    orderBy: [{ role: "desc" }, { email: "asc" }],
+    select: { id: true },
+  });
+  if (!assignee) return;
+
+  const patientName = `${patient.firstName} ${patient.lastName}`;
+  await app.prisma.task.create({
+    data: {
+      clinicId: params.clinicId,
+      title: `CRM recall · ${patientName}`,
+      description: [
+        `Pasiyent: ${patientName}`,
+        `Telefon: ${patient.phone}`,
+        `FIN/ID: ${patient.identityNumber}`,
+        `Klinik qəbul: ${params.encounterId}`,
+        `Səbəb: Həkim növbəti qəbul / kontrol tarixi qeyd edib.`,
+      ].join("\n"),
+      assigneeUserId: assignee.id,
+      createdByUserId: params.createdByUserId,
+      dueDate: params.nextVisitAt,
+      priority: "MEDIUM",
+      status: "PENDING",
+      active: true,
+    },
+  });
+}
+
 export async function clinicalCoreRoutes(app: FastifyInstance) {
   app.get("/patients/:id/clinical-summary", { preHandler: [app.authenticate, app.authorize(["ADMIN", "DOCTOR", "NURSE", "CALL_CENTER"])] }, async (request, reply) => {
     const { id } = patientParams.parse(request.params);
@@ -132,6 +195,13 @@ export async function clinicalCoreRoutes(app: FastifyInstance) {
         clinicId: request.user.clinicId,
         doctorUserId,
       },
+    });
+    await scheduleNextVisitRecall(app, {
+      clinicId: request.user.clinicId,
+      patientId: body.patientId,
+      encounterId: encounter.id,
+      nextVisitAt: encounter.nextVisitAt,
+      createdByUserId: userId,
     });
     return reply.code(201).send(encounter);
   });
