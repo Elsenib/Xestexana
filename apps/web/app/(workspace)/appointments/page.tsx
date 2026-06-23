@@ -78,6 +78,7 @@ export default function Page() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [date, setDate] = useState(toDateInput());
+  const [weekCounts, setWeekCounts] = useState<Record<string, number>>({});
   const [doctorId, setDoctorId] = useState("");
   const [patientId, setPatientId] = useState("");
   const [startsAt, setStartsAt] = useState(() => toDateTimeLocal(new Date(Date.now() + 60 * 60 * 1000)));
@@ -97,6 +98,34 @@ export default function Page() {
     return { active, checkedIn, completed };
   }, [appointments]);
 
+  async function loadWeekCounts(anchor = date) {
+    const start = new Date(`${anchor}T12:00:00`);
+    const mondayOffset = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - mondayOffset);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    try {
+      const rows = await apiRequest<Appointment[]>(
+        `/appointments?startDate=${start.toISOString()}&endDate=${end.toISOString()}`,
+      );
+      const counts: Record<string, number> = {};
+      for (let i = 0; i < 7; i += 1) {
+        const day = new Date(start);
+        day.setDate(start.getDate() + i);
+        counts[toDateInput(day)] = 0;
+      }
+      for (const row of rows) {
+        const key = toDateInput(new Date(row.startsAt));
+        if (counts[key] !== undefined) counts[key] += 1;
+      }
+      setWeekCounts(counts);
+    } catch {
+      setWeekCounts({});
+    }
+  }
+
   async function loadData(selectedDate = date) {
     setLoading(true);
     setError("");
@@ -113,6 +142,7 @@ export default function Page() {
       setPatients(patientRows);
       setDoctorId((current) => current || doctorRows[0]?.id || "");
       setPatientId((current) => current || patientRows[0]?.id || "");
+      await loadWeekCounts(selectedDate);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Məlumatlar yüklənmədi.");
     } finally {
@@ -203,6 +233,27 @@ export default function Page() {
           <small>Bugünkü bitmiş qəbullar</small>
           <strong>{stats.completed}</strong>
         </article>
+      </section>
+
+      <section className="ws-panel" style={{ marginBottom: 22, padding: 16 }}>
+        <p className="ws-eyebrow">Həftəlik təqvim</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
+          {Object.entries(weekCounts).map(([dayKey, count]) => (
+            <button
+              key={dayKey}
+              type="button"
+              className={`ws-button${dayKey === date ? " ws-button--primary" : ""}`}
+              onClick={() => {
+                setDate(dayKey);
+                void loadData(dayKey);
+              }}
+            >
+              {day(dayKey + "T12:00:00")}
+              <br />
+              <small>{count} randevu</small>
+            </button>
+          ))}
+        </div>
       </section>
 
       <div className="ws-scheduler-grid">

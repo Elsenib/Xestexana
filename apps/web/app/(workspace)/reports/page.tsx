@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
 import { apiRequest } from "../../../lib/lovelydent-api";
 
 type Report = {
@@ -9,6 +8,16 @@ type Report = {
   patientCount: number;
   statusCounts: Record<string, number>;
   branchCounts: Array<{ branch: string; count: number }>;
+};
+
+type FinanceReport = {
+  charges: number;
+  payments: number;
+  deposits: number;
+  refunds: number;
+  cashPayments: number;
+  openDebtors: number;
+  totalOutstanding: number;
 };
 
 function range(days: number) {
@@ -22,20 +31,26 @@ function range(days: number) {
 
 export default function Page() {
   const [report, setReport] = useState<Report>({ appointmentCount: 0, patientCount: 0, statusCounts: {}, branchCounts: [] });
+  const [finance, setFinance] = useState<FinanceReport | null>(null);
   const [error, setError] = useState("");
 
   async function load() {
     const dates = range(7);
     setError("");
     try {
-      setReport(await apiRequest<Report>(`/reports/operations?startDate=${dates.startDate}&endDate=${dates.endDate}`));
+      const [ops, fin] = await Promise.all([
+        apiRequest<Report>(`/reports/operations?startDate=${dates.startDate}&endDate=${dates.endDate}`),
+        apiRequest<FinanceReport>(`/finance/reports/summary?startDate=${dates.startDate}&endDate=${dates.endDate}`),
+      ]);
+      setReport(ops);
+      setFinance(fin);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hesabat məlumatları yüklənmədi.");
     }
   }
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   return (
@@ -44,9 +59,9 @@ export default function Page() {
         <div>
           <p className="ws-eyebrow">İdarəetmə · 7 günlük baxış</p>
           <h1>Hesabatlar</h1>
-          <span>Klinik aktivlik, randevu statusları və filial üzrə qərar göstəriciləri.</span>
+          <span>Klinik aktivlik və maliyyə göstəriciləri ledger-dən hesablanır.</span>
         </div>
-        <button className="ws-button" onClick={load}>Yenilə</button>
+        <button type="button" className="ws-button" onClick={() => void load()}>Yenilə</button>
       </div>
 
       {error ? <div className="ws-alert ws-alert--danger">{error}</div> : null}
@@ -58,14 +73,19 @@ export default function Page() {
           <strong>{report.appointmentCount}</strong>
         </article>
         <article>
-          <span>TAMAMLANMA</span>
-          <small>Bitmiş qəbullar</small>
-          <strong>{report.statusCounts.COMPLETED ?? 0}</strong>
+          <span>BORCLAR</span>
+          <small>Ledger xidmət haqqı</small>
+          <strong>{finance ? `${finance.charges.toFixed(2)} ₼` : "—"}</strong>
         </article>
         <article>
-          <span>PASİYENT BAZASI</span>
-          <small>Aktiv qeydiyyat</small>
-          <strong>{report.patientCount}</strong>
+          <span>ÖDƏNİŞ</span>
+          <small>Nağd: {finance ? `${finance.cashPayments.toFixed(2)} ₼` : "—"}</small>
+          <strong>{finance ? `${finance.payments.toFixed(2)} ₼` : "—"}</strong>
+        </article>
+        <article>
+          <span>BORCLU</span>
+          <small>Cari pasiyent sayı</small>
+          <strong>{finance ? finance.openDebtors : "—"}</strong>
         </article>
       </section>
 
@@ -93,15 +113,24 @@ export default function Page() {
           ) : (
             <div className="ws-empty">
               <b>Hələ hesabat datası yoxdur</b>
-              <span>Randevular yarandıqca göstəricilər dolacaq.</span>
             </div>
           )}
         </section>
 
         <aside className="ws-panel ws-focus">
-          <p className="ws-eyebrow">Rəhbərlik qeydi</p>
-          <h2>Operativ siqnallar</h2>
-          <p>No-show sayı: {report.statusCounts.NO_SHOW ?? 0}. Tamamlanan qəbullar: {report.statusCounts.COMPLETED ?? 0}. Maliyyə göstəriciləri yalnız ledger əməliyyatlarından sonra burada göstəriləcək.</p>
+          <p className="ws-eyebrow">Maliyyə xülasəsi</p>
+          <h2>7 günlük ledger</h2>
+          {finance ? (
+            <dl>
+              <div><dt>Depozit</dt><dd>{finance.deposits.toFixed(2)} ₼</dd></div>
+              <div><dt>Refund</dt><dd>{finance.refunds.toFixed(2)} ₼</dd></div>
+              <div><dt>Ümumi borc</dt><dd>{finance.totalOutstanding.toFixed(2)} ₼</dd></div>
+              <div><dt>Tamamlanan qəbullar</dt><dd>{report.statusCounts.COMPLETED ?? 0}</dd></div>
+              <div><dt>No-show</dt><dd>{report.statusCounts.NO_SHOW ?? 0}</dd></div>
+            </dl>
+          ) : (
+            <p>Maliyyə datası yüklənir...</p>
+          )}
         </aside>
       </div>
     </>

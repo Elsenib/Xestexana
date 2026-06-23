@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { apiRequest } from "../../../../lib/lovelydent-api";
+import { apiRequest, downloadAuthenticatedFile, openAuthenticatedHtml } from "../../../../lib/lovelydent-api";
 
 type Anamnesis = {
   version: number;
@@ -118,6 +119,53 @@ const encounterStatus: Record<string, string> = {
   COMPLETED: "Tamamlandı",
 };
 
+type Service = { id: string; name: string; price: number; code: string };
+type ChargeLine = { serviceId: string; description: string; quantity: number };
+type AccountEntry = {
+  id: string;
+  entryType: string;
+  direction: string;
+  amount: number;
+  description: string;
+  receiptNumber: string | null;
+  createdAt: string;
+  createdBy: string;
+};
+type PatientFileRow = {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  category: string;
+  createdAt: string;
+  uploadedBy: string;
+};
+
+function buildCharges(lines: ChargeLine[], services: Service[]) {
+  return lines
+    .filter((line) => line.serviceId || line.description.trim())
+    .map((line) => {
+      const service = services.find((item) => item.id === line.serviceId);
+      return {
+        serviceId: line.serviceId || undefined,
+        description: line.description.trim() || service?.name || "Klinika xidməti",
+        quantity: line.quantity,
+        amount: line.serviceId ? undefined : undefined,
+      };
+    });
+}
+
+async function postComplete(encounterId: string, charges: ReturnType<typeof buildCharges>) {
+  const response = await apiRequest<{ message?: string; approvalId?: string; status?: string }>(
+    `/clinical-encounters/${encounterId}/complete`,
+    {
+      method: "POST",
+      body: JSON.stringify({ charges: charges.length ? charges : undefined }),
+    },
+  );
+  return response;
+}
+
 function ClinicalCard() {
   const searchParams = useSearchParams();
   const id = searchParams?.get("id") ?? null;
@@ -141,6 +189,14 @@ function ClinicalCard() {
   const [teeth, setTeeth] = useState<Record<string, ToothEntry>>({});
   const [selected, setSelected] = useState("11");
   const [phase, setPhase] = useState<"EXISTING" | "PLANNED">("EXISTING");
+  const [services, setServices] = useState<Service[]>([]);
+  const [chargeLines, setChargeLines] = useState<ChargeLine[]>([
+    { serviceId: "", description: "", quantity: 1 },
+  ]);
+  const [accountBalance, setAccountBalance] = useState<number | null>(null);
+  const [accountEntries, setAccountEntries] = useState<AccountEntry[]>([]);
+  const [files, setFiles] = useState<PatientFileRow[]>([]);
+  const [uploadCategory, setUploadCategory] = useState("XRAY");
   async function load() {
     if (!id) return;
     try {
@@ -172,7 +228,29 @@ function ClinicalCard() {
   }
   useEffect(() => {
     void load();
+    void apiRequest<Service[]>("/services")
+      .then(setServices)
+      .catch(() => undefined);
   }, [id]);
+
+  async function loadAccount() {
+    if (!id) return;
+    const data = await apiRequest<{ balance: number; entries: AccountEntry[] }>(
+      `/finance/patients/${id}/account`,
+    );
+    setAccountBalance(data.balance);
+    setAccountEntries(data.entries);
+  }
+
+  async function loadFiles() {
+    if (!id) return;
+    setFiles(await apiRequest<PatientFileRow[]>(`/patients/${id}/files`));
+  }
+
+  useEffect(() => {
+    if (tab === "finance") void loadAccount().catch(() => undefined);
+    if (tab === "files") void loadFiles().catch(() => undefined);
+  }, [tab, id]);
   const list = (value: string) =>
     value
       .split(",")
@@ -239,16 +317,18 @@ function ClinicalCard() {
         }),
       });
       if (shouldComplete) {
-        await apiRequest(`/clinical-encounters/${created.id}/complete`, {
-          method: "POST",
-        });
+        const charges = buildCharges(chargeLines, services);
+        const result = await postComplete(created.id, charges);
+        if (result.approvalId) {
+          setNotice("Qəbul həkim təsdiqi gözləyir.");
+        } else {
+          setNotice("Klinik qəbul tamamlandı və borc yazıldı.");
+        }
+      } else {
+        setNotice("Klinik qəbul qaralama kimi saxlanıldı.");
       }
       setEncounter(emptyEncounter);
-      setNotice(
-        shouldComplete
-          ? "Klinik qəbul imzalanaraq tamamlandı."
-          : "Klinik qəbul qaralama kimi saxlanıldı.",
-      );
+      setChargeLines([{ serviceId: "", description: "", quantity: 1 }]);
       await load();
     } catch (c) {
       setError(c instanceof Error ? c.message : "Klinik qəbul saxlanmadı.");
@@ -260,13 +340,48 @@ function ClinicalCard() {
     setError("");
     setNotice("");
     try {
-      await apiRequest(`/clinical-encounters/${encounterId}/complete`, {
-        method: "POST",
-      });
-      setNotice("Klinik qəbul imzalanaraq tamamlandı.");
+      const charges = buildCharges(chargeLines, services);
+      const result = await postComplete(encounterId, charges);
+      if (result.approvalId) {
+        setNotice("Qəbul həkim təsdiqi gözləyir.");
+      } else {
+        setNotice("Klinik qəbul tamamlandı.");
+      }
       await load();
     } catch (c) {
       setError(c instanceof Error ? c.message : "Klinik qəbul tamamlanmadı.");
+    }
+  }
+
+  async function uploadFile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!id) return;
+    const input = event.currentTarget.elements.namedItem("file") as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Fayl 5 MB-dan böyük ola bilməz.");
+      return;
+    }
+    setError("");
+    setNotice("");
+    const buffer = await file.arrayBuffer();
+    const contentBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    try {
+      await apiRequest(`/patients/${id}/files`, {
+        method: "POST",
+        body: JSON.stringify({
+          originalName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          category: uploadCategory,
+          contentBase64,
+        }),
+      });
+      setNotice("Fayl yükləndi.");
+      input.value = "";
+      await loadFiles();
+    } catch (c) {
+      setError(c instanceof Error ? c.message : "Fayl yüklənmədi.");
     }
   }
   if (!id)
@@ -319,6 +434,8 @@ function ClinicalCard() {
           ["anamnesis", "Anamnez"],
           ["odontogram", "Odontogram"],
           ["encounters", "Klinik qəbullar"],
+          ["finance", "Hesab"],
+          ["files", "Fayllar"],
         ].map((x) => (
           <button
             className={tab === x[0] ? "active" : ""}
@@ -631,6 +748,56 @@ function ClinicalCard() {
                   onChange={(e) => setEncounter({ ...encounter, nextVisitAt: e.target.value })}
                 />
               </label>
+              <div className="ws-form-wide">
+                <p className="ws-eyebrow">Tamamlanma zamanı xidmət/borc</p>
+                {chargeLines.map((line, index) => (
+                  <div className="ws-form-grid" key={index} style={{ marginBottom: 8 }}>
+                    <label className="ws-form-wide">
+                      Xidmət
+                      <select
+                        value={line.serviceId}
+                        onChange={(e) => {
+                          const next = [...chargeLines];
+                          const service = services.find((item) => item.id === e.target.value);
+                          next[index] = {
+                            ...next[index],
+                            serviceId: e.target.value,
+                            description: service?.name ?? next[index].description,
+                          };
+                          setChargeLines(next);
+                        }}
+                      >
+                        <option value="">Seçin</option>
+                        {services.map((service) => (
+                          <option key={service.id} value={service.id}>
+                            {service.name} · {service.price} ₼
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Miqdar
+                      <input
+                        type="number"
+                        min="1"
+                        value={line.quantity}
+                        onChange={(e) => {
+                          const next = [...chargeLines];
+                          next[index] = { ...next[index], quantity: Number(e.target.value) };
+                          setChargeLines(next);
+                        }}
+                      />
+                    </label>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="ws-button"
+                  onClick={() => setChargeLines([...chargeLines, { serviceId: "", description: "", quantity: 1 }])}
+                >
+                  + Xidmət sətri
+                </button>
+              </div>
               <footer className="ws-form-wide">
                 <button className="ws-button" value="draft" disabled={savingEncounter}>
                   Qaralama saxla
@@ -670,6 +837,112 @@ function ClinicalCard() {
             )}
           </section>
         </div>
+      )}
+      {tab === "finance" && (
+        <section className="ws-panel pc-section">
+          <header className="ws-registry-tools">
+            <div>
+              <p className="ws-eyebrow">Pasiyent hesabı</p>
+              <h2>Maliyyə ledger</h2>
+            </div>
+            <strong>{accountBalance !== null ? `${accountBalance.toFixed(2)} ₼` : "—"}</strong>
+          </header>
+          <div style={{ padding: "0 20px 12px" }}>
+            <Link className="ws-button ws-button--primary" href={`/finance?patientId=${id}`}>
+              Ödəniş al
+            </Link>
+          </div>
+          {accountEntries.length ? (
+            <div className="ws-flow-list" style={{ padding: "0 20px 20px" }}>
+              {accountEntries.map((row) => (
+                <article className="ws-flow-card" key={row.id}>
+                  <time>{new Date(row.createdAt).toLocaleString("az-AZ")}</time>
+                  <div>
+                    <b>{row.description}</b>
+                    <span>
+                      {row.entryType} · {row.direction === "DEBIT" ? "+" : "−"}
+                      {row.amount.toFixed(2)} ₼ · {row.createdBy}
+                    </span>
+                  </div>
+                  {row.receiptNumber && (
+                    <button
+                      type="button"
+                      className="ws-row-action"
+                      onClick={() => void openAuthenticatedHtml(`/finance/receipts/${row.id}`)}
+                    >
+                      Qəbz
+                    </button>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="ws-empty" style={{ padding: 20 }}>
+              <span>Hesab hərəkəti yoxdur.</span>
+            </div>
+          )}
+        </section>
+      )}
+      {tab === "files" && (
+        <section className="ws-panel pc-section">
+          <header className="ws-registry-tools">
+            <div>
+              <p className="ws-eyebrow">Rentgen və sənədlər</p>
+              <h2>Fayl arxivi</h2>
+            </div>
+          </header>
+          <form className="ws-form-grid" style={{ padding: 20 }} onSubmit={uploadFile}>
+            <label>
+              Kateqoriya
+              <select value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)}>
+                <option value="XRAY">Rentgen</option>
+                <option value="DOCUMENT">Sənəd</option>
+                <option value="CONSENT">Razılıq</option>
+                <option value="GENERAL">Ümumi</option>
+              </select>
+            </label>
+            <label className="ws-form-wide">
+              Fayl (max 5 MB)
+              <input name="file" type="file" accept="image/*,.pdf" required />
+            </label>
+            <footer className="ws-form-wide">
+              <button type="submit" className="ws-button ws-button--primary">
+                Yüklə
+              </button>
+            </footer>
+          </form>
+          {files.length ? (
+            <div className="ws-flow-list" style={{ padding: "0 20px 20px" }}>
+              {files.map((file) => (
+                <article className="ws-flow-card" key={file.id}>
+                  <time>{new Date(file.createdAt).toLocaleDateString("az-AZ")}</time>
+                  <div>
+                    <b>{file.originalName}</b>
+                    <span>
+                      {file.category} · {(file.sizeBytes / 1024).toFixed(0)} KB · {file.uploadedBy}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="ws-row-action"
+                    onClick={() =>
+                      void downloadAuthenticatedFile(
+                        `/patients/${id}/files/${file.id}/download`,
+                        file.originalName,
+                      )
+                    }
+                  >
+                    Bax
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="ws-empty" style={{ padding: 20 }}>
+              <span>Fayl yoxdur.</span>
+            </div>
+          )}
+        </section>
       )}
     </>
   );

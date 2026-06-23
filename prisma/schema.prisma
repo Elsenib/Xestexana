@@ -43,6 +43,12 @@ model Clinic {
   treatmentPlans TreatmentPlan[]
   treatmentPlanVersions TreatmentPlanVersion[]
   approvalRequests ApprovalRequest[]
+  cashSessions CashSession[]
+  patientAccountEntries PatientAccountEntry[]
+  auditLogs AuditLog[]
+  patientFiles PatientFile[]
+  financePeriods FinancePeriod[]
+  notificationJobs NotificationJob[]
 
   @@index([active])
   @@index([subscriptionStatus])
@@ -72,6 +78,12 @@ model User {
   requestedApprovals ApprovalRequest[] @relation("ApprovalRequester")
   reviewedApprovals ApprovalRequest[] @relation("ApprovalReviewer")
   targetedApprovals ApprovalRequest[] @relation("ApprovalTargetReviewer")
+  openedCashSessions CashSession[] @relation("CashSessionOpener")
+  closedCashSessions CashSession[] @relation("CashSessionCloser")
+  patientAccountEntries PatientAccountEntry[] @relation("AccountEntryAuthor")
+  auditLogs AuditLog[]
+  uploadedPatientFiles PatientFile[] @relation("FileUploader")
+  closedFinancePeriods FinancePeriod[] @relation("PeriodCloser")
 
   @@index([clinicId, role])
 }
@@ -123,6 +135,8 @@ model PatientProfile {
   odontogramSnapshots OdontogramSnapshot[]
   clinicalEncounters ClinicalEncounter[]
   treatmentPlans TreatmentPlan[]
+  accountEntries PatientAccountEntry[]
+  files PatientFile[]
 
   @@index([clinicId, lastName, firstName])
   @@unique([clinicId, identityNumber])
@@ -349,6 +363,7 @@ model Service {
   updatedAt       DateTime            @updatedAt
   clinic          Clinic              @relation(fields: [clinicId], references: [id], onDelete: Restrict)
   treatmentItems  TreatmentPlanItem[]
+  accountEntries  PatientAccountEntry[]
 
   @@unique([clinicId, code])
   @@index([clinicId, active, category])
@@ -432,4 +447,125 @@ model ApprovalRequest {
   @@index([clinicId, reviewerRole, status, createdAt])
   @@index([clinicId, requestedByUserId, status])
   @@index([clinicId, reviewerUserId, status])
+}
+
+model CashSession {
+  id              String    @id @default(cuid())
+  clinicId        String
+  openedByUserId  String
+  closedByUserId  String?
+  openingBalance  Decimal   @default(0) @db.Decimal(14, 2)
+  expectedBalance Decimal?  @db.Decimal(14, 2)
+  countedBalance  Decimal?  @db.Decimal(14, 2)
+  status          String    @default("OPEN")
+  openNote        String?
+  closeNote       String?
+  openedAt        DateTime  @default(now())
+  closedAt        DateTime?
+  clinic          Clinic    @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  openedBy        User      @relation("CashSessionOpener", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  closedBy        User?     @relation("CashSessionCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  accountEntries  PatientAccountEntry[]
+
+  @@index([clinicId, status, openedAt])
+}
+
+model PatientAccountEntry {
+  id              String         @id @default(cuid())
+  clinicId        String
+  patientId       String
+  entryType       String
+  direction       String
+  amount          Decimal        @db.Decimal(14, 2)
+  paymentMethod   String?
+  referenceType   String?
+  referenceId     String?
+  serviceId       String?
+  description     String
+  receiptNumber   String?
+  cashSessionId   String?
+  createdByUserId String
+  createdAt       DateTime       @default(now())
+  clinic          Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient         PatientProfile @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service         Service?       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  cashSession     CashSession?   @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  createdBy       User           @relation("AccountEntryAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, patientId, createdAt])
+  @@index([clinicId, cashSessionId, createdAt])
+  @@index([clinicId, entryType, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  clinicId   String?
+  userId     String?
+  userEmail  String?
+  userRole   String?
+  category   String
+  action     String
+  entityType String?
+  entityId   String?
+  summary    String
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  clinic     Clinic?  @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, createdAt])
+  @@index([clinicId, category, createdAt])
+  @@index([clinicId, action, createdAt])
+  @@index([userId, createdAt])
+}
+
+model PatientFile {
+  id               String         @id @default(cuid())
+  clinicId         String
+  patientId        String
+  uploadedByUserId String
+  originalName     String
+  mimeType         String
+  sizeBytes        Int
+  storageKey       String
+  category         String         @default("GENERAL")
+  createdAt        DateTime       @default(now())
+  clinic           Clinic         @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient          PatientProfile @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  uploadedBy       User           @relation("FileUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, patientId, createdAt])
+}
+
+model FinancePeriod {
+  id               String   @id @default(cuid())
+  clinicId         String
+  closedThrough    DateTime @db.Date
+  closedByUserId   String
+  closedAt         DateTime @default(now())
+  note             String?
+  summary          Json?
+  clinic           Clinic   @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  closedBy         User     @relation("PeriodCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, closedThrough])
+}
+
+model NotificationJob {
+  id          String    @id @default(cuid())
+  clinicId    String
+  type        String
+  channel     String
+  recipient   String
+  payload     Json
+  status      String    @default("PENDING")
+  scheduledAt DateTime
+  sentAt      DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+  clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, status, scheduledAt])
 }

@@ -5,6 +5,12 @@ import { z } from "zod";
 import type { UserRole } from "@hospital/shared";
 
 import { env } from "../env.js";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+  auditRequestMeta,
+  recordAudit,
+} from "../services/audit-service.js";
 
 const registerPatientWithClinicSchema = z.object({
   clinicId: z.string().min(1),
@@ -170,6 +176,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post("/auth/login", { config: sensitiveRouteConfig }, async (request, reply) => {
     const body = loginSchema.parse(request.body);
+    const meta = auditRequestMeta(request);
 
     const user = await app.prisma.user.findUnique({
       where: { email: body.email },
@@ -190,6 +197,13 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     if (!user) {
+      await recordAudit(app.prisma, {
+        category: AUDIT_CATEGORIES.SECURITY,
+        action: AUDIT_ACTIONS.LOGIN_FAILED,
+        summary: `Uğursuz giriş: ${body.email}`,
+        details: { email: body.email, reason: "USER_NOT_FOUND" },
+        ...meta,
+      });
       return reply.code(401).send({
         message: "E-poct veya sifre yanlisdir."
       });
@@ -197,12 +211,34 @@ export async function authRoutes(app: FastifyInstance) {
 
     const isValid = await bcrypt.compare(body.password, user.passwordHash);
     if (!isValid) {
+      await recordAudit(app.prisma, {
+        clinicId: user.clinicId,
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+        category: AUDIT_CATEGORIES.SECURITY,
+        action: AUDIT_ACTIONS.LOGIN_FAILED,
+        summary: `Uğursuz giriş: ${user.email}`,
+        details: { email: user.email, reason: "INVALID_PASSWORD" },
+        ...meta,
+      });
       return reply.code(401).send({
         message: "E-poct veya sifre yanlisdir."
       });
     }
 
     if (!user.active) {
+      await recordAudit(app.prisma, {
+        clinicId: user.clinicId,
+        userId: user.id,
+        userEmail: user.email,
+        userRole: user.role,
+        category: AUDIT_CATEGORIES.SECURITY,
+        action: AUDIT_ACTIONS.LOGIN_BLOCKED_INACTIVE,
+        summary: `Deaktiv hesabla giriş cəhdi: ${user.email}`,
+        details: { email: user.email },
+        ...meta,
+      });
       return reply.code(401).send({
         message: "Hesab deaktiv edilmisdir."
       });
@@ -219,6 +255,18 @@ export async function authRoutes(app: FastifyInstance) {
         expiresIn: "12h"
       }
     );
+
+    await recordAudit(app.prisma, {
+      clinicId: user.clinicId,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      category: AUDIT_CATEGORIES.SECURITY,
+      action: AUDIT_ACTIONS.LOGIN_SUCCESS,
+      summary: `Uğurlu giriş: ${user.email}`,
+      details: { email: user.email, role: user.role },
+      ...meta,
+    });
 
     return {
       token,

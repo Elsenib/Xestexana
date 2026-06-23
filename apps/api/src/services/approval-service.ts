@@ -1,6 +1,11 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import type { UserRole } from "@hospital/shared";
+import {
+  applyEncounterCompletionWithCharges,
+  type ChargeLineInput,
+} from "./finance-service.js";
+import { AUDIT_ACTIONS, AUDIT_CATEGORIES, recordAudit } from "./audit-service.js";
 
 export const APPROVAL_ACTIONS = {
   STOCK_MOVEMENT: "STOCK_MOVEMENT",
@@ -33,6 +38,21 @@ const serviceUpsertPayloadSchema = z.object({
   mode: z.enum(["create", "update"]),
   serviceId: z.string().optional(),
   data: z.record(z.unknown()),
+});
+
+const encounterCompletePayloadSchema = z.object({
+  encounterId: z.string().min(1),
+  charges: z
+    .array(
+      z.object({
+        serviceId: z.string().min(1).optional(),
+        amount: z.coerce.number().positive().optional(),
+        quantity: z.coerce.number().positive().default(1),
+        description: z.string().min(2).max(500),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 function signedStock(type: string, quantity: Prisma.Decimal) {
@@ -152,19 +172,16 @@ export async function applyApprovedAction(
 
   if (approval.actionType === APPROVAL_ACTIONS.CLINICAL_ENCOUNTER_COMPLETE) {
     const encounterId = approval.entityId;
-    if (!encounterId) return { error: "ENTITY_NOT_FOUND" };
+    if (!encounterId) return { error: "ENTITY_NOT_FOUND" as const };
 
-    const encounter = await tx.clinicalEncounter.findFirst({
-      where: { id: encounterId, clinicId: approval.clinicId },
+    const payload = encounterCompletePayloadSchema.parse(approval.payload);
+    const result = await applyEncounterCompletionWithCharges(tx, {
+      clinicId: approval.clinicId,
+      encounterId,
+      createdByUserId: approval.requestedByUserId,
+      charges: payload.charges as ChargeLineInput[] | undefined,
     });
-    if (!encounter) return { error: "ENTITY_NOT_FOUND" };
-    if (encounter.status !== "DRAFT") return { error: "UNSUPPORTED" };
-    if (!encounter.diagnosis?.trim()) return { error: "UNSUPPORTED" };
-
-    await tx.clinicalEncounter.update({
-      where: { id: encounterId },
-      data: { status: "COMPLETED", signedAt: new Date(), completedAt: new Date() },
-    });
+    if (result.error) return { error: result.error };
     return {};
   }
 
@@ -229,17 +246,44 @@ export async function createApprovalRequest(
     supervisingDoctorUserId: input.supervisingDoctorUserId,
   });
 
-  return prisma.approvalRequest.create({
-    data: {
+  return prisma.$transaction(async (tx) => {
+    const approval = await tx.approvalRequest.create({
+      data: {
+        clinicId: input.clinicId,
+        requestedByUserId: input.requestedByUserId,
+        reviewerRole: reviewer.reviewerRole,
+        reviewerUserId: reviewer.reviewerUserId,
+        actionType: input.actionType,
+        entityType: input.entityType,
+        entityId: input.entityId ?? null,
+        payload: input.payload,
+      },
+    });
+
+    const requester = await tx.user.findUnique({
+      where: { id: input.requestedByUserId },
+      select: { email: true },
+    });
+
+    await recordAudit(tx, {
       clinicId: input.clinicId,
-      requestedByUserId: input.requestedByUserId,
-      reviewerRole: reviewer.reviewerRole,
-      reviewerUserId: reviewer.reviewerUserId,
-      actionType: input.actionType,
-      entityType: input.entityType,
-      entityId: input.entityId ?? null,
-      payload: input.payload,
-    },
+      userId: input.requestedByUserId,
+      userEmail: requester?.email ?? null,
+      userRole: input.requesterRole,
+      category: AUDIT_CATEGORIES.APPROVAL,
+      action: AUDIT_ACTIONS.APPROVAL_REQUESTED,
+      entityType: "ApprovalRequest",
+      entityId: approval.id,
+      summary: `Təsdiq sorğusu yaradıldı: ${input.actionType}`,
+      details: {
+        actionType: input.actionType,
+        targetEntityType: input.entityType,
+        targetEntityId: input.entityId ?? null,
+        reviewerRole: reviewer.reviewerRole,
+      },
+    });
+
+    return approval;
   });
 }
 

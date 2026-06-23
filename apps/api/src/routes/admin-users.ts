@@ -1,6 +1,13 @@
 ﻿import bcrypt from "bcryptjs";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+  actorFromRequest,
+  auditRequestMeta,
+  recordAudit,
+} from "../services/audit-service.js";
 
 const listQuerySchema = z.object({
   role: z.enum(["ADMIN", "DOCTOR", "NURSE", "CALL_CENTER", "CASHIER", "INVENTORY_MANAGER", "ACCOUNTANT", "MANAGEMENT"]).optional(),
@@ -45,6 +52,16 @@ export async function adminUserRoutes(app: FastifyInstance) {
       const user = await app.prisma.user.create({
         data: { email: body.email, passwordHash, role: body.role, clinicId: request.user.clinicId },
         select: { id: true, email: true, role: true, active: true, createdAt: true }
+      });
+      await recordAudit(app.prisma, {
+        ...actorFromRequest(request),
+        ...auditRequestMeta(request),
+        category: AUDIT_CATEGORIES.ADMIN,
+        action: AUDIT_ACTIONS.STAFF_CREATED,
+        entityType: "User",
+        entityId: user.id,
+        summary: `Yeni əməkdaş: ${user.email} (${user.role})`,
+        details: { email: user.email, role: user.role },
       });
       return reply.code(201).send(user);
     }
@@ -91,11 +108,22 @@ export async function adminUserRoutes(app: FastifyInstance) {
         where: { id, clinicId: request.user.clinicId, role: { notIn: ["SUPER_ADMIN", "PATIENT"] } },
       });
       if (!user) return reply.code(404).send({ message: "İstifadəçi tapılmadı." });
-      return app.prisma.user.update({
+      const updated = await app.prisma.user.update({
         where: { id },
         data: { active },
         select: { id: true, email: true, role: true, active: true, createdAt: true },
       });
+      await recordAudit(app.prisma, {
+        ...actorFromRequest(request),
+        ...auditRequestMeta(request),
+        category: AUDIT_CATEGORIES.ADMIN,
+        action: AUDIT_ACTIONS.STAFF_STATUS_CHANGED,
+        entityType: "User",
+        entityId: updated.id,
+        summary: `${updated.email} · ${active ? "aktiv edildi" : "deaktiv edildi"}`,
+        details: { email: updated.email, active, previousActive: user.active },
+      });
+      return updated;
     }
   );
 

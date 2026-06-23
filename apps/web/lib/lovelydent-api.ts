@@ -13,3 +13,31 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   if (response.status === 204) return null as T;
   return response.json() as Promise<T>;
 }
+
+export async function openAuthenticatedHtml(path: string) {
+  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error("Sənəd açıla bilmədi.");
+  const html = await response.text();
+  const popup = window.open("", "_blank");
+  if (!popup) throw new Error("Popup bloklanıb.");
+  popup.document.write(html);
+  popup.document.close();
+}
+
+export async function downloadAuthenticatedFile(path: string, filename: string) {
+  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error("Fayl endirilə bilmədi.");
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}

@@ -6,6 +6,13 @@ import {
   canUserReview,
   reviewQueueWhere,
 } from "../services/approval-service.js";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+  actorFromRequest,
+  auditRequestMeta,
+  recordAudit,
+} from "../services/audit-service.js";
 
 const staffRoles = [
   "SUPER_ADMIN",
@@ -104,7 +111,7 @@ export async function approvalRoutes(app: FastifyInstance) {
             }
 
             if (body.decision === "REJECT") {
-              return tx.approvalRequest.update({
+              const rejected = await tx.approvalRequest.update({
                 where: { id },
                 data: {
                   status: "REJECTED",
@@ -114,6 +121,7 @@ export async function approvalRoutes(app: FastifyInstance) {
                 },
                 include: approvalInclude,
               });
+              return { kind: "rejected" as const, approval: rejected };
             }
 
             const applied = await applyApprovedAction(tx, approval);
@@ -123,7 +131,7 @@ export async function approvalRoutes(app: FastifyInstance) {
             }
             if (applied.error === "UNSUPPORTED") return { error: "UNSUPPORTED" as const };
 
-            return tx.approvalRequest.update({
+            const approved = await tx.approvalRequest.update({
               where: { id },
               data: {
                 status: "APPROVED",
@@ -134,31 +142,60 @@ export async function approvalRoutes(app: FastifyInstance) {
               },
               include: approvalInclude,
             });
+            return { kind: "approved" as const, approval: approved };
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
 
         if ("error" in result) {
-          const codes = {
-            NOT_FOUND: 404,
-            REVIEWED: 409,
-            FORBIDDEN: 403,
-            ENTITY_NOT_FOUND: 404,
-            INSUFFICIENT: 409,
-            UNSUPPORTED: 400,
-          } as const;
-          const messages = {
-            NOT_FOUND: "Təsdiq sorğusu tapılmadı.",
-            REVIEWED: "Sorğu artıq cavablandırılıb.",
-            FORBIDDEN: "Bu sorğunu təsdiqləmək səlahiyyətiniz yoxdur.",
-            ENTITY_NOT_FOUND: "Əlaqəli məlumat tapılmadı.",
-            INSUFFICIENT: `Kifayət qədər stok yoxdur.${"balance" in result ? ` Cari qalıq: ${result.balance}.` : ""}`,
-            UNSUPPORTED: "Bu əməliyyat növü dəstəklənmir və ya artıq tətbiq olunub.",
-          } as const;
-          return reply.code(codes[result.error]).send({ message: messages[result.error] });
+          const err = result.error;
+          if (err === "NOT_FOUND") {
+            return reply.code(404).send({ message: "Təsdiq sorğusu tapılmadı." });
+          }
+          if (err === "REVIEWED") {
+            return reply.code(409).send({ message: "Sorğu artıq cavablandırılıb." });
+          }
+          if (err === "FORBIDDEN") {
+            return reply.code(403).send({ message: "Bu sorğunu təsdiqləmək səlahiyyətiniz yoxdur." });
+          }
+          if (err === "ENTITY_NOT_FOUND") {
+            return reply.code(404).send({ message: "Əlaqəli məlumat tapılmadı." });
+          }
+          if (err === "INSUFFICIENT") {
+            const suffix = "balance" in result ? ` Cari qalıq: ${result.balance}.` : "";
+            return reply.code(409).send({ message: `Kifayət qədər stok yoxdur.${suffix}` });
+          }
+          if (err === "UNSUPPORTED") {
+            return reply.code(400).send({ message: "Bu əməliyyat növü dəstəklənmir və ya artıq tətbiq olunub." });
+          }
+          return reply.code(400).send({ message: "Sorğu rədd edildi." });
         }
 
-        return result;
+        const actor = actorFromRequest(request);
+        const meta = auditRequestMeta(request);
+        const approval = result.approval;
+
+        await recordAudit(app.prisma, {
+          ...actor,
+          category: AUDIT_CATEGORIES.APPROVAL,
+          action:
+            result.kind === "approved" ? AUDIT_ACTIONS.APPROVAL_APPROVED : AUDIT_ACTIONS.APPROVAL_REJECTED,
+          entityType: "ApprovalRequest",
+          entityId: approval.id,
+          summary:
+            result.kind === "approved"
+              ? `Təsdiq edildi: ${approval.actionType}`
+              : `Rədd edildi: ${approval.actionType}`,
+          details: {
+            actionType: approval.actionType,
+            entityType: approval.entityType,
+            entityId: approval.entityId,
+            reviewNote: body.note ?? null,
+          },
+          ...meta,
+        });
+
+        return approval;
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
           return reply.code(409).send({ message: "Məlumat eyni anda dəyişdi. Yenidən yoxlayın." });

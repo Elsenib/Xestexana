@@ -2,12 +2,24 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { apiRequest, roleLabel, StaffRole } from "../../../lib/lovelydent-api";
+import { auditActionLabel, auditCategoryLabel } from "../../../lib/audit-labels";
 
 type Staff = {
   id: string;
   email: string;
   role: StaffRole;
   active: boolean;
+  createdAt: string;
+};
+
+type AuditRow = {
+  id: string;
+  category: string;
+  action: string;
+  summary: string;
+  userEmail: string | null;
+  userRole: string | null;
+  ipAddress: string | null;
   createdAt: string;
 };
 
@@ -23,20 +35,35 @@ const assignableRoles: StaffRole[] = [
 
 export default function AdministrationPage() {
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [auditRows, setAuditRows] = useState<AuditRow[]>([]);
+  const [auditCategory, setAuditCategory] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", role: "CALL_CENTER" as StaffRole });
 
+  async function loadStaff() {
+    setStaff(await apiRequest<Staff[]>("/admin-users?take=200"));
+  }
+
+  async function loadAudit() {
+    const query = auditCategory ? `?category=${auditCategory}&take=80` : "?take=80";
+    setAuditRows(await apiRequest<AuditRow[]>(`/audit/logs${query}`));
+  }
+
   async function load() {
     try {
-      setStaff(await apiRequest<Staff[]>("/admin-users?take=200"));
+      await Promise.all([loadStaff(), loadAudit()]);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Əməkdaşlar yüklənmədi.");
+      setError(reason instanceof Error ? reason.message : "Məlumatlar yüklənmədi.");
     }
   }
 
   useEffect(() => { void load(); }, []);
+
+  useEffect(() => {
+    void loadAudit().catch(() => undefined);
+  }, [auditCategory]);
 
   async function createStaff(event: FormEvent) {
     event.preventDefault();
@@ -75,9 +102,12 @@ export default function AdministrationPage() {
       <section className="ws-page-head">
         <div>
           <p className="ws-eyebrow">Klinika administratoru</p>
-          <h1>Əməkdaş və giriş idarəetməsi</h1>
-          <span>İşçi hesabları roluna görə yaradılır, bloklanır və yenidən aktivləşdirilir.</span>
+          <h1>Əməkdaş və audit jurnalı</h1>
+          <span>İşçi hesabları və kritik əməliyyatların dəyişdirilə bilməyən izi.</span>
         </div>
+        <button type="button" className="ws-button" onClick={() => void load()}>
+          Yenilə
+        </button>
       </section>
       {error && <div className="ws-alert ws-alert--danger">{error}</div>}
       {notice && <div className="ws-alert ws-alert--success">{notice}</div>}
@@ -109,11 +139,53 @@ export default function AdministrationPage() {
               <i />
               <div><b>{item.email}</b><span>{roleLabel[item.role] ?? item.role} · {new Date(item.createdAt).toLocaleDateString("az-AZ")}</span></div>
               <em>{item.active ? "Aktiv" : "Deaktiv"}</em>
-              <button className="ws-row-action" onClick={() => void setStatus(item)}>{item.active ? "Blokla" : "Aktiv et"}</button>
+              <button type="button" className="ws-row-action" onClick={() => void setStatus(item)}>{item.active ? "Blokla" : "Aktiv et"}</button>
             </div>
           ))}
           {!staff.length && <div className="ws-empty"><span>Əməkdaş hesabı yoxdur.</span></div>}
         </section>
+      </section>
+
+      <section className="ws-panel pc-section" style={{ marginTop: 22 }}>
+        <header className="ws-registry-tools">
+          <div>
+            <p className="ws-eyebrow">Audit jurnalı</p>
+            <h2>Kritik əməliyyat izi</h2>
+          </div>
+          <label>
+            Kateqoriya
+            <select value={auditCategory} onChange={(e) => setAuditCategory(e.target.value)}>
+              <option value="">Hamısı</option>
+              {Object.entries(auditCategoryLabel).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+        </header>
+        {auditRows.length ? (
+          <div className="ws-flow-list" style={{ padding: "0 20px 20px" }}>
+            {auditRows.map((row) => (
+              <article className="ws-flow-card" key={row.id}>
+                <time>{new Date(row.createdAt).toLocaleString("az-AZ")}</time>
+                <div>
+                  <b>{row.summary}</b>
+                  <span>
+                    {auditCategoryLabel[row.category] ?? row.category}
+                    {" · "}
+                    {auditActionLabel[row.action] ?? row.action}
+                    {row.userEmail ? ` · ${row.userEmail}` : ""}
+                    {row.ipAddress ? ` · ${row.ipAddress}` : ""}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="ws-empty" style={{ padding: 20 }}>
+            <b>Hələ audit qeydi yoxdur</b>
+            <span>Giriş, maliyyə və təsdiq əməliyyatları burada görünəcək.</span>
+          </div>
+        )}
       </section>
     </>
   );

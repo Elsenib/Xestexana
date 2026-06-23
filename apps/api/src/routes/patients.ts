@@ -138,7 +138,7 @@ export async function patientRoutes(app: FastifyInstance) {
   app.get(
     "/patients",
     {
-      preHandler: [app.authenticate, app.authorize(["ADMIN", "CALL_CENTER", "NURSE", "DOCTOR"])]
+      preHandler: [app.authenticate, app.authorize(["ADMIN", "CALL_CENTER", "NURSE", "DOCTOR", "CASHIER", "ACCOUNTANT"])]
     },
     async (request) => {
       const query = listQuerySchema.parse(request.query);

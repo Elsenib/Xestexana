@@ -6,9 +6,30 @@ import {
   createApprovalRequest,
   needsApproval,
 } from "../services/approval-service.js";
+import { applyEncounterCompletionWithCharges } from "../services/finance-service.js";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+  actorFromRequest,
+  auditRequestMeta,
+  recordAudit,
+} from "../services/audit-service.js";
 
 const patientParams = z.object({ id: z.string().min(1) });
 const encounterParams = z.object({ id: z.string().min(1) });
+const completeEncounterSchema = z.object({
+  charges: z
+    .array(
+      z.object({
+        serviceId: z.string().min(1).optional(),
+        amount: z.coerce.number().positive().optional(),
+        quantity: z.coerce.number().positive().default(1),
+        description: z.string().trim().min(2).max(500),
+      }),
+    )
+    .max(20)
+    .optional(),
+});
 const textList = z.array(z.string().trim().min(1).max(200)).max(50).default([]);
 
 const anamnesisSchema = z.object({
@@ -117,6 +138,7 @@ export async function clinicalCoreRoutes(app: FastifyInstance) {
 
   app.post("/clinical-encounters/:id/complete", { preHandler: [app.authenticate, app.authorize(["ADMIN", "DOCTOR", "NURSE"])] }, async (request, reply) => {
     const { id } = encounterParams.parse(request.params);
+    const body = completeEncounterSchema.parse(request.body ?? {});
     const userId = request.user.sub!;
     const encounter = await app.prisma.clinicalEncounter.findFirst({ where: { id, clinicId: request.user.clinicId } });
     if (!encounter) return reply.code(404).send({ message: "Klinik qəbul tapılmadı." });
@@ -131,7 +153,7 @@ export async function clinicalCoreRoutes(app: FastifyInstance) {
         actionType: APPROVAL_ACTIONS.CLINICAL_ENCOUNTER_COMPLETE,
         entityType: "ClinicalEncounter",
         entityId: id,
-        payload: { encounterId: id },
+        payload: { encounterId: id, charges: body.charges ?? [] },
         supervisingDoctorUserId: encounter.doctorUserId,
       });
       return reply.code(202).send({
@@ -141,10 +163,34 @@ export async function clinicalCoreRoutes(app: FastifyInstance) {
       });
     }
 
-    return app.prisma.clinicalEncounter.update({
-      where: { id },
-      data: { status: "COMPLETED", signedAt: new Date(), completedAt: new Date() },
+    const result = await app.prisma.$transaction((tx) =>
+      applyEncounterCompletionWithCharges(tx, {
+        clinicId: request.user.clinicId,
+        encounterId: id,
+        createdByUserId: userId,
+        charges: body.charges,
+      }),
+    );
+
+    if ("error" in result) {
+      return reply.code(409).send({ message: "Qəbul tamamlana bilmədi." });
+    }
+
+    await recordAudit(app.prisma, {
+      ...actorFromRequest(request),
+      ...auditRequestMeta(request),
+      category: AUDIT_CATEGORIES.CLINICAL,
+      action: AUDIT_ACTIONS.ENCOUNTER_COMPLETED,
+      entityType: "ClinicalEncounter",
+      entityId: id,
+      summary: `Klinik qəbul tamamlandı`,
+      details: {
+        encounterId: id,
+        chargeCount: body.charges?.length ?? 0,
+      },
     });
+
+    return reply.send({ message: "Klinik qəbul tamamlandı.", encounterId: id });
   });
 
   app.post("/clinical-encounters/:id/amend", { preHandler: [app.authenticate, app.authorize(["ADMIN", "DOCTOR"])] }, async (request, reply) => {

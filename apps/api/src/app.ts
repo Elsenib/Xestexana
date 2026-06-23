@@ -27,7 +27,11 @@ import { clinicalCoreRoutes } from "./routes/clinical-core.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { inventoryRoutes } from "./routes/inventory.js";
 import { treatmentPlanRoutes } from "./routes/treatment-plans.js";
+import { financeRoutes } from "./routes/finance.js";
 import { approvalRoutes } from "./routes/approvals.js";
+import { auditRoutes } from "./routes/audit.js";
+import { patientFileRoutes } from "./routes/patient-files.js";
+import { notificationRoutes } from "./routes/notifications.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -133,6 +137,10 @@ export function buildApp() {
   app.register(inventoryRoutes, { prefix: "/api" });
   app.register(treatmentPlanRoutes, { prefix: "/api" });
   app.register(approvalRoutes, { prefix: "/api" });
+  app.register(financeRoutes, { prefix: "/api" });
+  app.register(auditRoutes, { prefix: "/api" });
+  app.register(patientFileRoutes, { prefix: "/api" });
+  app.register(notificationRoutes, { prefix: "/api" });
 
   return app;
 }

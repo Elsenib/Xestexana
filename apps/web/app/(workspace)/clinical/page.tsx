@@ -160,7 +160,7 @@ export default function Page() {
                       <button onClick={() => changeStatus(appointment.id, "IN_TREATMENT")}>Müalicəyə başla</button>
                     ) : null}
                     {appointment.status === "IN_TREATMENT" ? (
-                      <button onClick={() => changeStatus(appointment.id, "COMPLETED")}>Tamamla</button>
+                      <Link href={`/patients/card?id=${appointment.patientId}`}>Klinik kart</Link>
                     ) : null}
                   </footer>
                 </article>

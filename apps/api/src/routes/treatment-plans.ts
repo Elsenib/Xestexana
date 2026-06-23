@@ -8,7 +8,7 @@ import {
   shouldAutoApply,
 } from "../services/approval-service.js";
 
-const clinicalReaders = ["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"] as const;
+const clinicalReaders = ["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE", "CASHIER", "ACCOUNTANT"] as const;
 const clinicalAuthors = ["ADMIN", "DOCTOR"] as const;
 const serviceSchema = z.object({
   code: z.string().trim().min(2).max(40).transform((value) => value.toUpperCase()),

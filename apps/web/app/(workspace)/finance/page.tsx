@@ -1,106 +1,294 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { apiRequest, openAuthenticatedHtml } from "../../../lib/lovelydent-api";
 
-import { apiRequest } from "../../../lib/lovelydent-api";
-
-type Appointment = {
-  id: string;
-  patientName: string;
-  patientPhone: string;
-  doctorName: string;
-  branch: string;
-  startsAt: string;
-  status: string;
+type FinanceSummary = {
+  todayCharges: number;
+  todayPayments: number;
+  todayCashPayments: number;
+  openDebtors: number;
+  totalOutstanding: number;
+  openSession: {
+    id: string;
+    openingBalance: number;
+    expectedBalance: number | null;
+    openedAt: string;
+    openedBy: string;
+  } | null;
 };
 
-function range() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-  return { startDate: start.toISOString(), endDate: end.toISOString() };
+type Debtor = {
+  patientId: string;
+  patientName: string;
+  phone: string;
+  balance: number;
+};
+
+type Patient = { id: string; firstName: string; lastName: string; phone: string };
+type Service = { id: string; name: string; price: number; code: string };
+
+export default function FinancePage() {
+  return (
+    <Suspense fallback={<div className="ws-empty"><b>Maliyyə yüklənir...</b></div>}>
+      <FinanceWorkspace />
+    </Suspense>
+  );
 }
 
-export default function Page() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [amount, setAmount] = useState("80");
-  const [email, setEmail] = useState("");
-  const [description, setDescription] = useState("LovelyDent xidmət ödənişi");
-  const [paymentUrl, setPaymentUrl] = useState("");
+function FinanceWorkspace() {
+  const [summary, setSummary] = useState<FinanceSummary | null>(null);
+  const [debtors, setDebtors] = useState<Debtor[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const completed = useMemo(() => appointments.filter((item) => item.status === "COMPLETED"), [appointments]);
-  const cashQueue = useMemo(() => appointments.filter((item) => ["IN_TREATMENT", "COMPLETED"].includes(item.status)), [appointments]);
+  const [openBalance, setOpenBalance] = useState("0");
+  const [closeBalance, setCloseBalance] = useState("");
+  const [paymentForm, setPaymentForm] = useState({
+    patientId: "",
+    amount: "",
+    paymentMethod: "CASH" as "CASH" | "CARD" | "TRANSFER" | "DEPOSIT",
+    description: "Klinika ödənişi",
+  });
+  const [chargeForm, setChargeForm] = useState({
+    patientId: "",
+    serviceId: "",
+    amount: "",
+    description: "",
+  });
+  const [depositForm, setDepositForm] = useState({
+    patientId: "",
+    amount: "",
+    paymentMethod: "CASH" as "CASH" | "CARD" | "TRANSFER",
+  });
+  const [refundForm, setRefundForm] = useState({ patientId: "", amount: "", description: "Geri qaytarma" });
+  const [periodDate, setPeriodDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [lastReceiptEntryId, setLastReceiptEntryId] = useState<string | null>(null);
+
+  const searchParams = useSearchParams();
+  const sessionOpen = Boolean(summary?.openSession);
 
   async function load() {
-    const dates = range();
     setLoading(true);
     setError("");
     try {
-      const rows = await apiRequest<Appointment[]>(`/appointments?startDate=${dates.startDate}&endDate=${dates.endDate}`);
-      setAppointments(rows);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Maliyyə məlumatları yüklənmədi.");
+      const [financeSummary, debtorRows, patientRows, serviceRows] = await Promise.all([
+        apiRequest<FinanceSummary>("/finance/summary"),
+        apiRequest<Debtor[]>("/finance/debtors?take=20"),
+        apiRequest<Patient[]>("/patients?take=100"),
+        apiRequest<Service[]>("/services").catch(() => []),
+      ]);
+      setSummary(financeSummary);
+      setDebtors(debtorRows);
+      setPatients(patientRows);
+      setServices(serviceRows);
+      if (!paymentForm.patientId && debtorRows[0]) {
+        setPaymentForm((value) => ({ ...value, patientId: debtorRows[0].patientId }));
+      }
+      if (!chargeForm.patientId && patientRows[0]) {
+        setChargeForm((value) => ({ ...value, patientId: patientRows[0].id }));
+      }
+      if (financeSummary.openSession) {
+        setCloseBalance(String(financeSummary.openSession.expectedBalance ?? 0));
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Maliyyə məlumatları yüklənmədi.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function createPayment(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    void load();
+  }, []);
+
+  useEffect(() => {
+    const patientId = searchParams?.get("patientId");
+    if (patientId) {
+      setPaymentForm((value) => ({ ...value, patientId }));
+      setDepositForm((value) => ({ ...value, patientId }));
+      setRefundForm((value) => ({ ...value, patientId }));
+      setChargeForm((value) => ({ ...value, patientId }));
+    }
+  }, [searchParams]);
+
+  async function openSession(event: FormEvent) {
     event.preventDefault();
     setError("");
-    setPaymentUrl("");
+    setNotice("");
     try {
-      const result = await apiRequest<{ paymentUrl: string }>("/payment/paymes-initiate", {
+      await apiRequest("/finance/cash-sessions/open", {
         method: "POST",
-        body: JSON.stringify({
-          amount: Number(amount),
-          customerEmail: email,
-          description
-        })
+        body: JSON.stringify({ openingBalance: Number(openBalance) }),
       });
-      setPaymentUrl(result.paymentUrl);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ödəniş linki yaradıla bilmədi.");
+      setNotice("Kassa növbəsi açıldı.");
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Kassa açılmadı.");
     }
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  async function closeSession(event: FormEvent) {
+    event.preventDefault();
+    if (!summary?.openSession) return;
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiRequest<{ variance: number }>(`/finance/cash-sessions/${summary.openSession.id}/close`, {
+        method: "POST",
+        body: JSON.stringify({ countedBalance: Number(closeBalance) }),
+      });
+      setNotice(`Kassa bağlandı. Fərq: ${result.variance.toFixed(2)} AZN`);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Kassa bağlanmadı.");
+    }
+  }
+
+  async function submitPayment(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiRequest<{ receiptNumber: string; balance: number; entryId: string }>("/finance/payments", {
+        method: "POST",
+        body: JSON.stringify({
+          ...paymentForm,
+          amount: Number(paymentForm.amount),
+        }),
+      });
+      setNotice(`Ödəniş qəbul edildi. Qəbz: ${result.receiptNumber}. Qalıq borc: ${result.balance.toFixed(2)} AZN`);
+      setLastReceiptEntryId(result.entryId);
+      setPaymentForm((value) => ({ ...value, amount: "" }));
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Ödəniş qeydə alınmadı.");
+    }
+  }
+
+  async function submitCharge(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiRequest<{ balance: number }>("/finance/charges", {
+        method: "POST",
+        body: JSON.stringify({
+          patientId: chargeForm.patientId,
+          serviceId: chargeForm.serviceId || undefined,
+          amount: chargeForm.serviceId ? undefined : Number(chargeForm.amount),
+          description: chargeForm.description || "Klinika xidməti",
+        }),
+      });
+      setNotice(`Borc yazıldı. Yeni balans: ${result.balance.toFixed(2)} AZN`);
+      setChargeForm((value) => ({ ...value, amount: "", description: "" }));
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Borc yazılmadı.");
+    }
+  }
+
+  async function submitDeposit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiRequest<{ receiptNumber: string }>("/finance/deposits", {
+        method: "POST",
+        body: JSON.stringify({ ...depositForm, amount: Number(depositForm.amount) }),
+      });
+      setNotice(`Depozit qeydə alındı: ${result.receiptNumber}`);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Depozit qeydə alınmadı.");
+    }
+  }
+
+  async function submitRefund(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest("/finance/refunds", {
+        method: "POST",
+        body: JSON.stringify({ ...refundForm, amount: Number(refundForm.amount) }),
+      });
+      setNotice("Refund qeydə alındı.");
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Refund qeydə alınmadı.");
+    }
+  }
+
+  async function closePeriod(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest("/finance/periods/close", {
+        method: "POST",
+        body: JSON.stringify({ closedThrough: periodDate }),
+      });
+      setNotice(`Maliyyə periodu bağlandı: ${periodDate}`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Period bağlanmadı.");
+    }
+  }
+
+  const selectedDebtor = useMemo(
+    () => debtors.find((row) => row.patientId === paymentForm.patientId),
+    [debtors, paymentForm.patientId],
+  );
 
   return (
     <>
-      <div className="ws-page-head">
+      <section className="ws-page-head">
         <div>
-          <p className="ws-eyebrow">Maliyyə · Kassa axını</p>
-          <h1>Kassa və maliyyə</h1>
-          <span>Bugünkü qəbuldan ödənişə keçid və Paymes link yaratma paneli.</span>
+          <p className="ws-eyebrow">Maliyyə · Faza 1B</p>
+          <h1>Kassa və pasiyent hesabı</h1>
+          <span>
+            Borc və ödənişlər server ledger-indən avtomatik hesablanır. Nağd ödəniş üçün açıq kassa
+            növbəsi tələb olunur.
+          </span>
         </div>
-        <button className="ws-button" onClick={load} disabled={loading}>
+        <button type="button" className="ws-button" onClick={() => void load()} disabled={loading}>
           Yenilə
         </button>
-      </div>
+      </section>
 
-      {error ? <div className="ws-alert ws-alert--danger">{error}</div> : null}
+      {error && <div className="ws-alert ws-alert--danger">{error}</div>}
+      {notice && <div className="ws-alert ws-alert--success">{notice}</div>}
+      {lastReceiptEntryId && (
+        <div style={{ marginBottom: 12 }}>
+          <button
+            type="button"
+            className="ws-button"
+            onClick={() => void openAuthenticatedHtml(`/finance/receipts/${lastReceiptEntryId}`)}
+          >
+            Son qəbzi çap et
+          </button>
+        </div>
+      )}
 
       <section className="ws-metrics">
         <article>
-          <span>KASSA NÖVBƏSİ</span>
-          <small>Müalicədə və tamamlananlar</small>
-          <strong>{cashQueue.length}</strong>
+          <span>BUGÜNKÜ BORCLAR</span>
+          <strong>{summary ? `${summary.todayCharges.toFixed(2)} ₼` : "—"}</strong>
+          <small>Server hesablanmış xidmət haqqı</small>
         </article>
         <article>
-          <span>TAMAMLANAN</span>
-          <small>Bugünkü xidmətlər</small>
-          <strong>{completed.length}</strong>
+          <span>BUGÜNKÜ ÖDƏNİŞ</span>
+          <strong>{summary ? `${summary.todayPayments.toFixed(2)} ₼` : "—"}</strong>
+          <small>Nağd: {summary ? `${summary.todayCashPayments.toFixed(2)} ₼` : "—"}</small>
         </article>
         <article>
-          <span>TƏSDİQLİ DÖVRİYYƏ</span>
-          <small>Maliyyə ledger-indən hesablanacaq</small>
-          <strong>—</strong>
+          <span>ÜMUMİ BORCLU</span>
+          <strong>{summary ? summary.openDebtors : "—"}</strong>
+          <small>Cəmi: {summary ? `${summary.totalOutstanding.toFixed(2)} ₼` : "—"}</small>
         </article>
       </section>
 
@@ -108,60 +296,224 @@ export default function Page() {
         <section className="ws-panel ws-today">
           <header>
             <div>
-              <p className="ws-eyebrow">Günlük kassa siyahısı</p>
-              <h2>Ödəniş gözləyən qəbullar</h2>
+              <p className="ws-eyebrow">Borclu pasiyentlər</p>
+              <h2>Ödəniş gözləyənlər</h2>
             </div>
           </header>
-          {cashQueue.length ? (
+          {debtors.length ? (
             <div className="ws-flow-list">
-              {cashQueue.map((item) => (
-                <article className="ws-flow-card" key={item.id}>
-                  <time>{new Date(item.startsAt).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" })}</time>
+              {debtors.map((row) => (
+                <article className="ws-flow-card" key={row.patientId}>
+                  <time>{row.balance.toFixed(2)} ₼</time>
                   <div>
-                    <b>{item.patientName}</b>
-                    <span>{item.patientPhone}</span>
-                    <small>
-                      {item.doctorName} · {item.branch}
-                    </small>
+                    <b>{row.patientName}</b>
+                    <span>{row.phone}</span>
                   </div>
-                  <em data-status={item.status}>{item.status}</em>
+                  <button
+                    type="button"
+                    className="ws-row-action"
+                    onClick={() => setPaymentForm((value) => ({ ...value, patientId: row.patientId, amount: String(row.balance) }))}
+                  >
+                    Ödəniş al
+                  </button>
                 </article>
               ))}
             </div>
           ) : (
             <div className="ws-empty">
-              <b>Kassa növbəsi boşdur</b>
-              <span>Müalicə tamamlandıqca ödəniş işi burada görünəcək.</span>
+              <b>Borclu pasiyent yoxdur</b>
+              <span>Xidmət tamamlandıqca borc avtomatik burada görünəcək.</span>
             </div>
           )}
         </section>
 
         <aside className="ws-panel ws-booking">
-          <p className="ws-eyebrow">Online ödəniş</p>
-          <h2>Paymes link yarat</h2>
-          <form className="ws-form-grid" onSubmit={createPayment}>
+          <p className="ws-eyebrow">Kassa növbəsi</p>
+          <h2>{sessionOpen ? "Açıq növbə" : "Növbə bağlıdır"}</h2>
+          {summary?.openSession ? (
+            <div className="ws-clinical-note">
+              <p>Açılış: {summary.openSession.openingBalance.toFixed(2)} ₼</p>
+              <p>Gözlənilən: {(summary.openSession.expectedBalance ?? 0).toFixed(2)} ₼</p>
+              <p>Açıldı: {new Date(summary.openSession.openedAt).toLocaleString("az-AZ")}</p>
+            </div>
+          ) : null}
+
+          {!sessionOpen ? (
+            <form className="ws-form-grid" onSubmit={openSession}>
+              <label>
+                Açılış qalığı (AZN)
+                <input type="number" min="0" step="0.01" value={openBalance} onChange={(e) => setOpenBalance(e.target.value)} />
+              </label>
+              <footer className="ws-form-wide">
+                <button type="submit" className="ws-button ws-button--primary">
+                  Kassanı aç
+                </button>
+              </footer>
+            </form>
+          ) : (
+            <form className="ws-form-grid" onSubmit={closeSession}>
+              <label>
+                Sayılmış qalıq (AZN)
+                <input type="number" min="0" step="0.01" required value={closeBalance} onChange={(e) => setCloseBalance(e.target.value)} />
+              </label>
+              <footer className="ws-form-wide">
+                <button type="submit" className="ws-button ws-button--primary">
+                  Gün sonu bağla
+                </button>
+              </footer>
+            </form>
+          )}
+
+          <hr style={{ margin: "24px 0", border: 0, borderTop: "1px solid var(--ws-line)" }} />
+
+          <p className="ws-eyebrow">Ödəniş qəbulu</p>
+          <form className="ws-form-grid" onSubmit={submitPayment}>
             <label className="ws-form-wide">
-              Müştəri e-poçtu
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+              Pasiyent
+              <select required value={paymentForm.patientId} onChange={(e) => setPaymentForm({ ...paymentForm, patientId: e.target.value })}>
+                <option value="">Seçin</option>
+                {patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.firstName} {patient.lastName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedDebtor && <small className="ws-form-wide">Cari borc: {selectedDebtor.balance.toFixed(2)} ₼</small>}
+            <label>
+              Məbləğ (AZN)
+              <input type="number" min="0.01" step="0.01" required value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} />
+            </label>
+            <label>
+              Metod
+              <select value={paymentForm.paymentMethod} onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value as "CASH" | "CARD" | "TRANSFER" | "DEPOSIT" })}>
+                <option value="CASH">Nağd</option>
+                <option value="CARD">Kart</option>
+                <option value="TRANSFER">Köçürmə</option>
+                <option value="DEPOSIT">Depozit balansından</option>
+              </select>
+            </label>
+            <footer className="ws-form-wide">
+              <button type="submit" className="ws-button ws-button--primary" disabled={paymentForm.paymentMethod === "CASH" && !sessionOpen}>
+                Ödənişi qeydə al
+              </button>
+            </footer>
+          </form>
+        </aside>
+      </div>
+
+      <section className="ws-panel pc-section" style={{ marginTop: 22 }}>
+        <header className="ws-registry-tools">
+          <span>Manual xidmət borcu</span>
+        </header>
+        <form className="ws-form-grid" onSubmit={submitCharge} style={{ padding: 20 }}>
+          <label className="ws-form-wide">
+            Pasiyent
+            <select required value={chargeForm.patientId} onChange={(e) => setChargeForm({ ...chargeForm, patientId: e.target.value })}>
+              {patients.map((patient) => (
+                <option key={patient.id} value={patient.id}>
+                  {patient.firstName} {patient.lastName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="ws-form-wide">
+            Xidmət (ixtiyari)
+            <select value={chargeForm.serviceId} onChange={(e) => setChargeForm({ ...chargeForm, serviceId: e.target.value })}>
+              <option value="">Manual məbləğ</option>
+              {services.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name} · {service.price} ₼
+                </option>
+              ))}
+            </select>
+          </label>
+          {!chargeForm.serviceId && (
+            <label>
+              Məbləğ (AZN)
+              <input type="number" min="0.01" step="0.01" required value={chargeForm.amount} onChange={(e) => setChargeForm({ ...chargeForm, amount: e.target.value })} />
+            </label>
+          )}
+          <label className="ws-form-wide">
+            Açıqlama
+            <input required value={chargeForm.description} onChange={(e) => setChargeForm({ ...chargeForm, description: e.target.value })} placeholder="Məs. Müalicə xidməti" />
+          </label>
+          <footer className="ws-form-wide">
+            <button type="submit" className="ws-button ws-button--primary">
+              Borc yaz
+            </button>
+          </footer>
+        </form>
+      </section>
+
+      <div className="ws-dashboard-grid" style={{ marginTop: 22 }}>
+        <section className="ws-panel pc-section">
+          <p className="ws-eyebrow">Depozit</p>
+          <h2>Əvvəlcədən ödəniş</h2>
+          <form className="ws-form-grid" style={{ padding: 20 }} onSubmit={submitDeposit}>
+            <label className="ws-form-wide">
+              Pasiyent
+              <select required value={depositForm.patientId} onChange={(e) => setDepositForm({ ...depositForm, patientId: e.target.value })}>
+                {patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>{patient.firstName} {patient.lastName}</option>
+                ))}
+              </select>
             </label>
             <label>
               Məbləğ
-              <input type="number" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} required />
+              <input type="number" min="0.01" step="0.01" required value={depositForm.amount} onChange={(e) => setDepositForm({ ...depositForm, amount: e.target.value })} />
             </label>
-            <label className="ws-form-wide">
-              Açıqlama
-              <input value={description} onChange={(event) => setDescription(event.target.value)} required />
+            <label>
+              Metod
+              <select value={depositForm.paymentMethod} onChange={(e) => setDepositForm({ ...depositForm, paymentMethod: e.target.value as "CASH" | "CARD" | "TRANSFER" })}>
+                <option value="CASH">Nağd</option>
+                <option value="CARD">Kart</option>
+                <option value="TRANSFER">Köçürmə</option>
+              </select>
             </label>
             <footer className="ws-form-wide">
-              <button className="ws-button ws-button--primary">Link yarat</button>
+              <button type="submit" className="ws-button ws-button--primary">Depozit yaz</button>
             </footer>
           </form>
-          {paymentUrl ? (
-            <p className="ws-clinical-note">
-              Link hazırdır: <a href={paymentUrl} target="_blank" rel="noreferrer">{paymentUrl}</a>
-            </p>
-          ) : null}
-        </aside>
+        </section>
+        <section className="ws-panel pc-section">
+          <p className="ws-eyebrow">Refund</p>
+          <h2>Geri qaytarma</h2>
+          <form className="ws-form-grid" style={{ padding: 20 }} onSubmit={submitRefund}>
+            <label className="ws-form-wide">
+              Pasiyent
+              <select required value={refundForm.patientId} onChange={(e) => setRefundForm({ ...refundForm, patientId: e.target.value })}>
+                {patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>{patient.firstName} {patient.lastName}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Məbləğ
+              <input type="number" min="0.01" step="0.01" required value={refundForm.amount} onChange={(e) => setRefundForm({ ...refundForm, amount: e.target.value })} />
+            </label>
+            <label className="ws-form-wide">
+              Səbəb
+              <input required value={refundForm.description} onChange={(e) => setRefundForm({ ...refundForm, description: e.target.value })} />
+            </label>
+            <footer className="ws-form-wide">
+              <button type="submit" className="ws-button ws-button--primary">Refund et</button>
+            </footer>
+          </form>
+        </section>
+        <section className="ws-panel pc-section">
+          <p className="ws-eyebrow">Period</p>
+          <h2>Gün sonu bağlanması</h2>
+          <form className="ws-form-grid" style={{ padding: 20 }} onSubmit={closePeriod}>
+            <label>
+              Bağlanacaq gün
+              <input type="date" required value={periodDate} onChange={(e) => setPeriodDate(e.target.value)} />
+            </label>
+            <footer className="ws-form-wide">
+              <button type="submit" className="ws-button ws-button--primary">Periodu bağla</button>
+            </footer>
+          </form>
+        </section>
       </div>
     </>
   );

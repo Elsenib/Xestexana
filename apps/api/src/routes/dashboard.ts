@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { UserRole } from "@hospital/shared";
 import { z } from "zod";
+import { todayFinanceSummary } from "../services/finance-service.js";
 
 const staffRoles: UserRole[] = [
   "SUPER_ADMIN",
@@ -160,14 +161,22 @@ export async function dashboardRoutes(app: FastifyInstance) {
             { label: "Materiallara bax", href: "/inventory" },
           ];
           break;
-        case "CASHIER":
+        case "CASHIER": {
+          const finance = await app.prisma.$transaction((tx) => todayFinanceSummary(tx, clinicId));
           metrics = [
-            { label: "Tamamlanan qəbullar", value: String(count("COMPLETED")), detail: "Ödəniş yoxlanmalıdır" },
-            { label: "Kassa növbəsi", value: "—", detail: "Ledger modulu qurulmalıdır" },
-            { label: "Gün sonu fərqi", value: "—", detail: "Real əməliyyatdan hesablanacaq" },
+            { label: "Bugünkü ödəniş", value: `${finance.todayPayments.toFixed(2)} ₼`, detail: `Nağd: ${finance.todayCashPayments.toFixed(2)} ₼` },
+            { label: "Borclu pasiyent", value: String(finance.openDebtors), detail: `Cəmi: ${finance.totalOutstanding.toFixed(2)} ₼` },
+            {
+              label: "Kassa növbəsi",
+              value: finance.openSession ? "Açıq" : "Bağlı",
+              detail: finance.openSession
+                ? `Gözlənilən: ${(finance.openSession.expectedBalance ?? 0).toFixed(2)} ₼`
+                : "Günə başlamaq üçün kassanı açın",
+            },
           ];
           actions = [{ label: "Kassa və maliyyəyə keç", href: "/finance" }];
           break;
+        }
         case "INVENTORY_MANAGER": {
           const products = await app.prisma.product.findMany({
             where: { clinicId, active: true },
