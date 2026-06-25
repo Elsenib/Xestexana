@@ -53,6 +53,8 @@ model Clinic {
   crmActivities CRMActivity[]
   commissionRules CommissionRule[]
   commissionEntries CommissionEntry[]
+  warrantyTemplates WarrantyTemplate[]
+  patientWarranties PatientWarranty[]
 
   @@index([active])
   @@index([subscriptionStatus])
@@ -93,6 +95,7 @@ model User {
   crmActivities CRMActivity[] @relation("CRMActivityAuthor")
   commissionRules CommissionRule[] @relation("CommissionRuleDoctor")
   commissionEntries CommissionEntry[] @relation("CommissionEntryDoctor")
+  issuedWarranties PatientWarranty[] @relation("WarrantyIssuer")
 
   @@index([clinicId, role])
 }
@@ -147,6 +150,7 @@ model PatientProfile {
   accountEntries PatientAccountEntry[]
   files PatientFile[]
   commissionEntries CommissionEntry[]
+  warranties PatientWarranty[]
 
   @@index([clinicId, lastName, firstName])
   @@unique([clinicId, identityNumber])
@@ -394,6 +398,7 @@ model TreatmentPlan {
   patient        PatientProfile         @relation(fields: [patientId], references: [id], onDelete: Restrict)
   doctor         User                   @relation("TreatmentPlanDoctor", fields: [doctorUserId], references: [id], onDelete: Restrict)
   versions       TreatmentPlanVersion[]
+  warranties     PatientWarranty[]
 
   @@index([clinicId, patientId, createdAt])
   @@index([clinicId, status, updatedAt])
@@ -471,6 +476,45 @@ model CommissionEntry {
   @@index([clinicId, doctorUserId, status])
   @@index([clinicId, createdAt])
   @@index([clinicId, sourceType, sourceId])
+}
+
+model WarrantyTemplate {
+  id          String            @id @default(cuid())
+  clinicId    String
+  name        String
+  durationDays Int
+  conditions  String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  clinic      Clinic            @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  warranties  PatientWarranty[]
+
+  @@index([clinicId, active])
+}
+
+model PatientWarranty {
+  id              String            @id @default(cuid())
+  clinicId        String
+  patientId       String
+  treatmentPlanId String?
+  templateId      String?
+  title           String
+  issuedAt        DateTime          @default(now())
+  expiresAt       DateTime
+  status          String            @default("ACTIVE")
+  note            String?
+  createdByUserId String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  clinic          Clinic            @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient         PatientProfile    @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  treatmentPlan   TreatmentPlan?    @relation(fields: [treatmentPlanId], references: [id], onDelete: SetNull)
+  template        WarrantyTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdBy       User              @relation("WarrantyIssuer", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, patientId, status])
+  @@index([clinicId, expiresAt])
 }
 
 

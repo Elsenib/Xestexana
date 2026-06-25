@@ -9,6 +9,7 @@ export type NavIconId =
   | "treatments"
   | "finance"
   | "commission"
+  | "warranty"
   | "inventory"
   | "reports"
   | "administration"
@@ -69,6 +70,12 @@ const paths: Record<NavIconId, ReactNode> = {
       <circle cx="8" cy="8" r="3" />
       <circle cx="16" cy="16" r="3" />
       <path d="m18 6-12 12" />
+    </>
+  ),
+  warranty: (
+    <>
+      <path d="M12 3 19 6v5c0 4.5-2.8 7.9-7 10-4.2-2.1-7-5.5-7-10V6l7-3Z" />
+      <path d="m9 12 2 2 4-5" />
     </>
   ),
   inventory: (
