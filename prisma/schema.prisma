@@ -51,6 +51,8 @@ model Clinic {
   notificationJobs NotificationJob[]
   leads Lead[]
   crmActivities CRMActivity[]
+  commissionRules CommissionRule[]
+  commissionEntries CommissionEntry[]
 
   @@index([active])
   @@index([subscriptionStatus])
@@ -89,6 +91,8 @@ model User {
   createdLeads Lead[] @relation("LeadCreator")
   assignedLeads Lead[] @relation("LeadAssignee")
   crmActivities CRMActivity[] @relation("CRMActivityAuthor")
+  commissionRules CommissionRule[] @relation("CommissionRuleDoctor")
+  commissionEntries CommissionEntry[] @relation("CommissionEntryDoctor")
 
   @@index([clinicId, role])
 }
@@ -142,6 +146,7 @@ model PatientProfile {
   treatmentPlans TreatmentPlan[]
   accountEntries PatientAccountEntry[]
   files PatientFile[]
+  commissionEntries CommissionEntry[]
 
   @@index([clinicId, lastName, firstName])
   @@unique([clinicId, identityNumber])
@@ -369,6 +374,7 @@ model Service {
   clinic          Clinic              @relation(fields: [clinicId], references: [id], onDelete: Restrict)
   treatmentItems  TreatmentPlanItem[]
   accountEntries  PatientAccountEntry[]
+  commissionRules CommissionRule[]
 
   @@unique([clinicId, code])
   @@index([clinicId, active, category])
@@ -424,6 +430,47 @@ model TreatmentPlanItem {
 
   @@index([treatmentPlanVersionId])
   @@index([serviceId])
+}
+
+model CommissionRule {
+  id           String   @id @default(cuid())
+  clinicId     String
+  doctorUserId String?
+  serviceId    String?
+  percent      Decimal  @db.Decimal(5, 2)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  doctor       User?    @relation("CommissionRuleDoctor", fields: [doctorUserId], references: [id], onDelete: SetNull)
+  service      Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, active])
+  @@index([clinicId, doctorUserId])
+  @@index([clinicId, serviceId])
+}
+
+model CommissionEntry {
+  id           String          @id @default(cuid())
+  clinicId     String
+  doctorUserId String
+  patientId    String?
+  sourceType   String
+  sourceId     String?
+  baseAmount   Decimal         @db.Decimal(14, 2)
+  percent      Decimal         @db.Decimal(5, 2)
+  amount       Decimal         @db.Decimal(14, 2)
+  status       String          @default("PENDING")
+  note         String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  clinic       Clinic          @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  doctor       User            @relation("CommissionEntryDoctor", fields: [doctorUserId], references: [id], onDelete: Restrict)
+  patient      PatientProfile? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, doctorUserId, status])
+  @@index([clinicId, createdAt])
+  @@index([clinicId, sourceType, sourceId])
 }
 
 
