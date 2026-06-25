@@ -31,6 +31,13 @@ const listLeadQuerySchema = z.object({
   take: z.coerce.number().int().min(1).max(200).default(80),
 });
 
+const createLeadActivitySchema = z.object({
+  type: z.enum(["CALL", "WHATSAPP", "NOTE", "PRICE_SENT", "FOLLOW_UP"]).default("NOTE"),
+  channel: z.enum(["PHONE", "WHATSAPP", "INSTAGRAM", "SYSTEM", "OTHER"]).default("PHONE"),
+  summary: z.string().trim().min(2).max(1000),
+  nextActionAt: z.string().datetime().nullable().optional(),
+});
+
 const listRecallQuerySchema = z.object({
   status: taskStatusSchema.optional(),
   take: z.coerce.number().int().min(1).max(200).default(80),
@@ -194,6 +201,52 @@ export async function crmRoutes(app: FastifyInstance) {
       ]);
 
       return { id: lead.id, status: body.status };
+    },
+  );
+
+  app.post(
+    "/crm/leads/:id/activities",
+    { preHandler: [app.authenticate, app.authorize([...crmRoles])] },
+    async (request, reply) => {
+      const params = z.object({ id: z.string().min(1) }).parse(request.params);
+      const body = createLeadActivitySchema.parse(request.body);
+      const userId = request.user.sub;
+      const isOperator = request.user.role === "CALL_CENTER";
+      if (!userId) return reply.code(401).send({ message: "Giriş tələb olunur." });
+
+      const lead = await app.prisma.lead.findFirst({
+        where: { id: params.id, clinicId: request.user.clinicId },
+        select: { id: true, status: true, assignedToUserId: true },
+      });
+      if (!lead) return reply.code(404).send({ message: "Lead tapılmadı." });
+      if (isOperator && lead.assignedToUserId && lead.assignedToUserId !== userId) {
+        return reply.code(403).send({ message: "Bu lead sizə təyin edilməyib." });
+      }
+
+      const activity = await app.prisma.$transaction(async (tx) => {
+        const created = await tx.cRMActivity.create({
+          data: {
+            clinicId: request.user.clinicId,
+            leadId: lead.id,
+            type: body.type,
+            channel: body.channel,
+            summary: body.summary,
+            nextActionAt: body.nextActionAt ? new Date(body.nextActionAt) : null,
+            createdByUserId: userId,
+          },
+        });
+        if (lead.status === "NEW") {
+          await tx.lead.update({ where: { id: lead.id }, data: { status: "CONTACTED" } });
+        } else {
+          await tx.lead.update({ where: { id: lead.id }, data: { updatedAt: new Date() } });
+        }
+        return created;
+      });
+
+      return reply.code(201).send({
+        id: activity.id,
+        createdAt: activity.createdAt.toISOString(),
+      });
     },
   );
 

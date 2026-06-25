@@ -56,6 +56,7 @@ export default function CrmPage() {
   const [recalls, setRecalls] = useState<Recall[]>([]);
   const [recallForm, setRecallForm] = useState(defaultRecall);
   const [leadForm, setLeadForm] = useState(defaultLead);
+  const [leadActivityDrafts, setLeadActivityDrafts] = useState<Record<string, string>>({});
   const [leadFilter, setLeadFilter] = useState<"" | LeadStatus>("");
   const [recallFilter, setRecallFilter] = useState<"" | RecallStatus>("");
   const [notice, setNotice] = useState("");
@@ -110,6 +111,25 @@ export default function CrmPage() {
       setError(e instanceof Error ? e.message : "Lead yaradılmadı.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function addLeadActivity(id: string) {
+    const summary = leadActivityDrafts[id]?.trim();
+    if (!summary) {
+      setError("Lead qeydi boş ola bilməz.");
+      return;
+    }
+    setError("");
+    try {
+      await apiRequest(`/crm/leads/${id}/activities`, {
+        method: "POST",
+        body: JSON.stringify({ type: "NOTE", channel: "PHONE", summary }),
+      });
+      setLeadActivityDrafts((current) => ({ ...current, [id]: "" }));
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Lead qeydi saxlanmadı.");
     }
   }
 
@@ -205,9 +225,16 @@ export default function CrmPage() {
           {leads.length ? <div className="ws-flow-list" style={{ padding: "0 20px 20px" }}>
             {leads.map((lead) => <article className="ws-flow-card" key={lead.id}>
               <time>{new Date(lead.createdAt).toLocaleString("az-AZ")}</time>
-              <div><b>{lead.fullName}</b><span>{lead.phone} · {lead.source} · {lead.assignedTo?.email ?? "Məsul seçilməyib"}</span><small>{lead.interest || lead.note || "Qeyd yoxdur"}</small></div>
+              <div>
+                <b>{lead.fullName}</b>
+                <span>{lead.phone} · {lead.source} · {lead.assignedTo?.email ?? "Məsul seçilməyib"}</span>
+                <small>{lead.interest || lead.note || "Qeyd yoxdur"}</small>
+                {lead.activities.length ? <small>{lead.activities.map((activity) => `${new Date(activity.createdAt).toLocaleDateString("az-AZ")}: ${activity.summary}`).join(" · ")}</small> : null}
+                <textarea value={leadActivityDrafts[lead.id] ?? ""} onChange={(e) => setLeadActivityDrafts((current) => ({ ...current, [lead.id]: e.target.value }))} placeholder="Zəng / WhatsApp / qiymət qeydi..." style={{ marginTop: 8, minHeight: 58 }} />
+              </div>
               <em data-status={lead.status === "LOST" ? "CANCELED" : lead.status === "CONVERTED" ? "COMPLETED" : "PENDING"}>{leadStatusLabel[lead.status]}</em>
               <footer>
+                <button type="button" onClick={() => void addLeadActivity(lead.id)}>Qeyd saxla</button>
                 {lead.status === "NEW" && <button type="button" onClick={() => void updateLeadStatus(lead.id, "CONTACTED")}>Əlaqə saxlandı</button>}
                 {lead.status !== "APPOINTMENT_PLANNED" && lead.status !== "CONVERTED" && <button type="button" onClick={() => void updateLeadStatus(lead.id, "APPOINTMENT_PLANNED")}>Randevu planla</button>}
                 {lead.status !== "CONVERTED" && <button type="button" onClick={() => void updateLeadStatus(lead.id, "CONVERTED")}>Çevrildi</button>}
