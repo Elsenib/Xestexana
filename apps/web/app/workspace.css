@@ -1099,7 +1099,10 @@
 .pc-file-preview {
   display: grid;
   place-items: center;
+  width: 100%;
   height: 190px;
+  border: 0;
+  padding: 0;
   background:
     radial-gradient(circle at top left, rgba(10, 91, 75, 0.12), transparent 36%),
     #f5f1ea;
@@ -1107,6 +1110,7 @@
   font-size: 12px;
   letter-spacing: 0.18em;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .pc-file-preview img,

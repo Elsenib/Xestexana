@@ -7,6 +7,7 @@ import {
   apiRequest,
   downloadAuthenticatedFile,
   fetchAuthenticatedBlobUrl,
+  openAuthenticatedFile,
   openAuthenticatedHtml,
 } from "../../../../lib/lovelydent-api";
 
@@ -446,6 +447,26 @@ function ClinicalCard() {
       await loadFiles();
     } catch (c) {
       setError(c instanceof Error ? c.message : "Fayl yüklənmədi.");
+    }
+  }
+
+  async function openFile(file: PatientFileRow) {
+    if (!id) return;
+    setError("");
+    try {
+      await openAuthenticatedFile(`/patients/${id}/files/${file.id}/download`);
+    } catch (c) {
+      setError(c instanceof Error ? c.message : "Fayl açıla bilmədi.");
+    }
+  }
+
+  async function downloadFile(file: PatientFileRow) {
+    if (!id) return;
+    setError("");
+    try {
+      await downloadAuthenticatedFile(`/patients/${id}/files/${file.id}/download`, file.originalName);
+    } catch (c) {
+      setError(c instanceof Error ? c.message : "Fayl endirilə bilmədi.");
     }
   }
   if (!id)
@@ -981,15 +1002,15 @@ function ClinicalCard() {
                 const preview = filePreviews[file.id];
                 return (
                 <article className="pc-file-card" key={file.id}>
-                  <div className="pc-file-preview">
+                  <button type="button" className="pc-file-preview" onClick={() => void openFile(file)}>
                     {preview?.kind === "image" ? (
                       <img src={preview.url} alt={file.originalName} />
                     ) : preview?.kind === "pdf" ? (
                       <iframe src={preview.url} title={file.originalName} />
                     ) : (
-                      <span>{file.mimeType === "application/pdf" ? "PDF" : "FILE"}</span>
+                      <span>{file.mimeType.startsWith("image/") ? "PREVIEW YOXDUR" : file.mimeType === "application/pdf" ? "PDF" : "FILE"}</span>
                     )}
-                  </div>
+                  </button>
                   <div className="pc-file-meta">
                     <time>{new Date(file.createdAt).toLocaleDateString("az-AZ")}</time>
                     <b>{file.originalName}</b>
@@ -998,11 +1019,11 @@ function ClinicalCard() {
                     </span>
                   </div>
                   <footer>
-                    {preview && (
+                    {true && (
                       <button
                         type="button"
                         className="ws-row-action"
-                        onClick={() => window.open(preview.url, "_blank")}
+                        onClick={() => void openFile(file)}
                       >
                         Aç
                       </button>
@@ -1010,12 +1031,7 @@ function ClinicalCard() {
                     <button
                       type="button"
                       className="ws-row-action"
-                      onClick={() =>
-                        void downloadAuthenticatedFile(
-                          `/patients/${id}/files/${file.id}/download`,
-                          file.originalName,
-                        )
-                      }
+                      onClick={() => void downloadFile(file)}
                     >
                       Endir
                     </button>

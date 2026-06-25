@@ -102,3 +102,25 @@ export async function fetchAuthenticatedBlobUrl(path: string) {
   const blob = await response.blob();
   return URL.createObjectURL(blob);
 }
+
+export async function openAuthenticatedFile(path: string) {
+  const popup = window.open("", "_blank");
+  if (!popup) throw new Error("Popup bloklanıb.");
+  popup.document.write('<p style="font-family:system-ui,sans-serif;padding:24px">Fayl açılır...</p>');
+
+  try {
+    const url = await fetchAuthenticatedBlobUrl(path);
+    popup.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Fayl açıla bilmədi.";
+    popup.document.body.innerHTML = "";
+    const paragraph = popup.document.createElement("p");
+    paragraph.style.fontFamily = "system-ui, sans-serif";
+    paragraph.style.padding = "24px";
+    paragraph.style.color = "#b91c1c";
+    paragraph.textContent = message;
+    popup.document.body.appendChild(paragraph);
+    throw error;
+  }
+}
