@@ -13,6 +13,24 @@ const createRecallSchema = z.object({
   priority: taskPrioritySchema.default("MEDIUM"),
 });
 
+const leadStatusSchema = z.enum(["NEW", "CONTACTED", "APPOINTMENT_PLANNED", "CONVERTED", "LOST"]);
+const leadSourceSchema = z.enum(["PHONE", "WHATSAPP", "INSTAGRAM", "REFERRAL", "WALK_IN", "WEBSITE", "OTHER"]);
+
+const createLeadSchema = z.object({
+  fullName: z.string().trim().min(2).max(160),
+  phone: z.string().trim().min(5).max(40),
+  source: leadSourceSchema.default("OTHER"),
+  interest: z.string().trim().max(300).nullable().optional(),
+  note: z.string().trim().max(1000).nullable().optional(),
+  assignedToUserId: z.string().min(1).nullable().optional(),
+});
+
+const listLeadQuerySchema = z.object({
+  status: leadStatusSchema.optional(),
+  q: z.string().trim().max(80).optional(),
+  take: z.coerce.number().int().min(1).max(200).default(80),
+});
+
 const listRecallQuerySchema = z.object({
   status: taskStatusSchema.optional(),
   take: z.coerce.number().int().min(1).max(200).default(80),
@@ -33,6 +51,149 @@ export async function crmRoutes(app: FastifyInstance) {
         select: { id: true, email: true, role: true },
       });
       return rows;
+    },
+  );
+
+  app.get(
+    "/crm/leads",
+    { preHandler: [app.authenticate, app.authorize([...crmRoles])] },
+    async (request) => {
+      const query = listLeadQuerySchema.parse(request.query);
+      const userId = request.user.sub;
+      const isOperator = request.user.role === "CALL_CENTER";
+
+      const rows = await app.prisma.lead.findMany({
+        where: {
+          clinicId: request.user.clinicId,
+          ...(query.status ? { status: query.status } : {}),
+          ...(query.q
+            ? {
+                OR: [
+                  { fullName: { contains: query.q, mode: "insensitive" } },
+                  { phone: { contains: query.q } },
+                  { interest: { contains: query.q, mode: "insensitive" } },
+                ],
+              }
+            : {}),
+          ...(isOperator ? { OR: [{ assignedToUserId: userId }, { assignedToUserId: null }] } : {}),
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        take: query.take,
+        include: {
+          assignedTo: { select: { id: true, email: true, role: true } },
+          createdBy: { select: { id: true, email: true, role: true } },
+          activities: {
+            orderBy: { createdAt: "desc" },
+            take: 3,
+            include: { createdBy: { select: { email: true } } },
+          },
+        },
+      });
+
+      return rows.map((lead) => ({
+        id: lead.id,
+        fullName: lead.fullName,
+        phone: lead.phone,
+        source: lead.source,
+        status: lead.status,
+        interest: lead.interest,
+        note: lead.note,
+        assignedTo: lead.assignedTo,
+        createdBy: lead.createdBy,
+        createdAt: lead.createdAt.toISOString(),
+        updatedAt: lead.updatedAt.toISOString(),
+        activities: lead.activities.map((activity) => ({
+          id: activity.id,
+          type: activity.type,
+          channel: activity.channel,
+          summary: activity.summary,
+          nextActionAt: activity.nextActionAt?.toISOString() ?? null,
+          createdAt: activity.createdAt.toISOString(),
+          createdBy: activity.createdBy.email,
+        })),
+      }));
+    },
+  );
+
+  app.post(
+    "/crm/leads",
+    { preHandler: [app.authenticate, app.authorize([...crmRoles])] },
+    async (request, reply) => {
+      const body = createLeadSchema.parse(request.body);
+      const createdByUserId = request.user.sub;
+      if (!createdByUserId) return reply.code(401).send({ message: "Giriş tələb olunur." });
+
+      let assignedToUserId = body.assignedToUserId ?? null;
+      if (!assignedToUserId && request.user.role === "CALL_CENTER") assignedToUserId = createdByUserId;
+      if (assignedToUserId) {
+        const assignee = await app.prisma.user.findFirst({
+          where: {
+            id: assignedToUserId,
+            clinicId: request.user.clinicId,
+            active: true,
+            role: { in: ["CALL_CENTER", "ADMIN"] },
+          },
+          select: { id: true },
+        });
+        if (!assignee) return reply.code(400).send({ message: "Məsul işçi tapılmadı və ya aktiv deyil." });
+      }
+
+      const lead = await app.prisma.lead.create({
+        data: {
+          clinicId: request.user.clinicId,
+          fullName: body.fullName,
+          phone: body.phone,
+          source: body.source,
+          interest: body.interest ?? null,
+          note: body.note ?? null,
+          assignedToUserId,
+          createdByUserId,
+          activities: {
+            create: {
+              clinicId: request.user.clinicId,
+              type: "NOTE",
+              channel: body.source === "WHATSAPP" ? "WHATSAPP" : "PHONE",
+              summary: body.note || `Lead yaradıldı: ${body.interest || body.source}`,
+              createdByUserId,
+            },
+          },
+        },
+      });
+
+      return reply.code(201).send({ id: lead.id });
+    },
+  );
+
+  app.patch(
+    "/crm/leads/:id/status",
+    { preHandler: [app.authenticate, app.authorize([...crmRoles])] },
+    async (request, reply) => {
+      const params = z.object({ id: z.string().min(1) }).parse(request.params);
+      const body = z.object({ status: leadStatusSchema, note: z.string().trim().max(600).optional() }).parse(request.body);
+      const userId = request.user.sub;
+      const isOperator = request.user.role === "CALL_CENTER";
+
+      const lead = await app.prisma.lead.findFirst({ where: { id: params.id, clinicId: request.user.clinicId } });
+      if (!lead) return reply.code(404).send({ message: "Lead tapılmadı." });
+      if (isOperator && lead.assignedToUserId && lead.assignedToUserId !== userId) {
+        return reply.code(403).send({ message: "Bu lead sizə təyin edilməyib." });
+      }
+
+      await app.prisma.$transaction([
+        app.prisma.lead.update({ where: { id: lead.id }, data: { status: body.status } }),
+        app.prisma.cRMActivity.create({
+          data: {
+            clinicId: request.user.clinicId,
+            leadId: lead.id,
+            type: "STATUS_CHANGE",
+            channel: "SYSTEM",
+            summary: body.note || `Status dəyişdi: ${body.status}`,
+            createdByUserId: userId!,
+          },
+        }),
+      ]);
+
+      return { id: lead.id, status: body.status };
     },
   );
 
