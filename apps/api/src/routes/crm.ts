@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { z } from "zod";
 
 const crmRoles = ["SUPER_ADMIN", "ADMIN", "CALL_CENTER"] as const;
@@ -36,6 +38,16 @@ const createLeadActivitySchema = z.object({
   channel: z.enum(["PHONE", "WHATSAPP", "INSTAGRAM", "SYSTEM", "OTHER"]).default("PHONE"),
   summary: z.string().trim().min(2).max(1000),
   nextActionAt: z.string().datetime().nullable().optional(),
+});
+
+const convertLeadSchema = z.object({
+  email: z.string().email().optional(),
+  password: z.string().min(8).optional(),
+  identityNumber: z.string().trim().min(3).max(80).optional(),
+  firstName: z.string().trim().min(1).max(80).optional(),
+  lastName: z.string().trim().min(1).max(80).optional(),
+  gender: z.enum(["FEMALE", "MALE", "OTHER"]).default("OTHER"),
+  birthDate: z.string().datetime().optional(),
 });
 
 const listRecallQuerySchema = z.object({
@@ -105,6 +117,7 @@ export async function crmRoutes(app: FastifyInstance) {
         status: lead.status,
         interest: lead.interest,
         note: lead.note,
+        convertedPatientId: lead.convertedPatientId,
         assignedTo: lead.assignedTo,
         createdBy: lead.createdBy,
         createdAt: lead.createdAt.toISOString(),
@@ -201,6 +214,106 @@ export async function crmRoutes(app: FastifyInstance) {
       ]);
 
       return { id: lead.id, status: body.status };
+    },
+  );
+
+  app.post(
+    "/crm/leads/:id/convert-patient",
+    { preHandler: [app.authenticate, app.authorize([...crmRoles])] },
+    async (request, reply) => {
+      const params = z.object({ id: z.string().min(1) }).parse(request.params);
+      const body = convertLeadSchema.parse(request.body ?? {});
+      const userId = request.user.sub;
+      const isOperator = request.user.role === "CALL_CENTER";
+      if (!userId) return reply.code(401).send({ message: "Giriş tələb olunur." });
+
+      const lead = await app.prisma.lead.findFirst({
+        where: { id: params.id, clinicId: request.user.clinicId },
+        select: {
+          id: true,
+          fullName: true,
+          phone: true,
+          status: true,
+          convertedPatientId: true,
+          assignedToUserId: true,
+        },
+      });
+      if (!lead) return reply.code(404).send({ message: "Lead tapılmadı." });
+      if (isOperator && lead.assignedToUserId && lead.assignedToUserId !== userId) {
+        return reply.code(403).send({ message: "Bu lead sizə təyin edilməyib." });
+      }
+      if (lead.convertedPatientId) {
+        return { id: lead.id, patientId: lead.convertedPatientId, alreadyConverted: true };
+      }
+
+      const nameParts = lead.fullName.trim().split(/\s+/).filter(Boolean);
+      const firstName = body.firstName ?? nameParts[0] ?? "Lead";
+      const lastName = body.lastName ?? (nameParts.slice(1).join(" ") || "Pasiyent");
+      const identityNumber = body.identityNumber ?? `LEAD-${lead.id.slice(-8).toUpperCase()}`;
+      const email = body.email ?? `lead-${lead.id.slice(0, 8)}@lovelydent.local`;
+      const passwordHash = await bcrypt.hash(body.password ?? crypto.randomUUID(), 10);
+
+      const result = await app.prisma.$transaction(async (tx) => {
+        const existingIdentity = await tx.patientProfile.findFirst({
+          where: { clinicId: request.user.clinicId, identityNumber },
+          select: { id: true },
+        });
+        if (existingIdentity) return { error: "IDENTITY_EXISTS" as const };
+
+        const existingEmail = await tx.user.findUnique({ where: { email }, select: { id: true } });
+        if (existingEmail) return { error: "EMAIL_EXISTS" as const };
+
+        const patientUser = await tx.user.create({
+          data: {
+            clinicId: request.user.clinicId,
+            email,
+            passwordHash,
+            role: "PATIENT",
+          },
+        });
+        const patient = await tx.patientProfile.create({
+          data: {
+            clinicId: request.user.clinicId,
+            userId: patientUser.id,
+            identityNumber,
+            firstName,
+            lastName,
+            phone: lead.phone,
+            gender: body.gender,
+            birthDate: body.birthDate ? new Date(body.birthDate) : new Date("1990-01-01T00:00:00.000Z"),
+          },
+        });
+
+        await tx.lead.update({
+          where: { id: lead.id },
+          data: {
+            status: "CONVERTED",
+            convertedPatientId: patient.id,
+          },
+        });
+        await tx.cRMActivity.create({
+          data: {
+            clinicId: request.user.clinicId,
+            leadId: lead.id,
+            patientId: patient.id,
+            type: "CONVERTED",
+            channel: "SYSTEM",
+            summary: `Lead pasiyent kartına çevrildi: ${firstName} ${lastName}`,
+            createdByUserId: userId,
+          },
+        });
+
+        return { patient };
+      });
+
+      if ("error" in result) {
+        if (result.error === "IDENTITY_EXISTS") {
+          return reply.code(409).send({ message: "Bu şəxsiyyət/unikal nömrə ilə pasiyent artıq var." });
+        }
+        return reply.code(409).send({ message: "Bu e-poçt ilə istifadəçi artıq var." });
+      }
+
+      return reply.code(201).send({ id: lead.id, patientId: result.patient.id });
     },
   );
 

@@ -16,6 +16,7 @@ type Lead = {
   status: LeadStatus;
   interest: string | null;
   note: string | null;
+  convertedPatientId: string | null;
   assignedTo: Agent | null;
   createdAt: string;
   activities: Array<{ id: string; summary: string; createdAt: string; createdBy: string }>;
@@ -143,6 +144,24 @@ export default function CrmPage() {
     }
   }
 
+  async function convertLeadToPatient(id: string) {
+    setError("");
+    setNotice("");
+    setSaving(true);
+    try {
+      const result = await apiRequest<{ patientId: string; alreadyConverted?: boolean }>(`/crm/leads/${id}/convert-patient`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setNotice(result.alreadyConverted ? "Lead artıq pasiyent kartına çevrilmişdi." : "Lead pasiyent kartına çevrildi.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Lead pasiyentə çevrilmədi.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function createRecall(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -229,6 +248,7 @@ export default function CrmPage() {
                 <b>{lead.fullName}</b>
                 <span>{lead.phone} · {lead.source} · {lead.assignedTo?.email ?? "Məsul seçilməyib"}</span>
                 <small>{lead.interest || lead.note || "Qeyd yoxdur"}</small>
+                {lead.convertedPatientId ? <small>Pasiyent kartı hazırdır: {lead.convertedPatientId}</small> : null}
                 {lead.activities.length ? <small>{lead.activities.map((activity) => `${new Date(activity.createdAt).toLocaleDateString("az-AZ")}: ${activity.summary}`).join(" · ")}</small> : null}
                 <textarea value={leadActivityDrafts[lead.id] ?? ""} onChange={(e) => setLeadActivityDrafts((current) => ({ ...current, [lead.id]: e.target.value }))} placeholder="Zəng / WhatsApp / qiymət qeydi..." style={{ marginTop: 8, minHeight: 58 }} />
               </div>
@@ -237,7 +257,7 @@ export default function CrmPage() {
                 <button type="button" onClick={() => void addLeadActivity(lead.id)}>Qeyd saxla</button>
                 {lead.status === "NEW" && <button type="button" onClick={() => void updateLeadStatus(lead.id, "CONTACTED")}>Əlaqə saxlandı</button>}
                 {lead.status !== "APPOINTMENT_PLANNED" && lead.status !== "CONVERTED" && <button type="button" onClick={() => void updateLeadStatus(lead.id, "APPOINTMENT_PLANNED")}>Randevu planla</button>}
-                {lead.status !== "CONVERTED" && <button type="button" onClick={() => void updateLeadStatus(lead.id, "CONVERTED")}>Çevrildi</button>}
+                {!lead.convertedPatientId && <button type="button" disabled={saving} onClick={() => void convertLeadToPatient(lead.id)}>Pasiyentə çevir</button>}
                 {lead.status !== "LOST" && <button type="button" onClick={() => void updateLeadStatus(lead.id, "LOST")}>İtirildi</button>}
               </footer>
             </article>)}
