@@ -35,6 +35,7 @@ import { auditRoutes } from "./routes/audit.js";
 import { patientFileRoutes } from "./routes/patient-files.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { warrantyRoutes } from "./routes/warranties.js";
+import { backupRoutes } from "./routes/backups.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -147,6 +148,7 @@ export function buildApp() {
   app.register(patientFileRoutes, { prefix: "/api" });
   app.register(notificationRoutes, { prefix: "/api" });
   app.register(warrantyRoutes, { prefix: "/api" });
+  app.register(backupRoutes, { prefix: "/api" });
 
   return app;
 }

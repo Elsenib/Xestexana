@@ -55,6 +55,7 @@ model Clinic {
   commissionEntries CommissionEntry[]
   warrantyTemplates WarrantyTemplate[]
   patientWarranties PatientWarranty[]
+  backupJobs BackupJob[]
 
   @@index([active])
   @@index([subscriptionStatus])
@@ -96,6 +97,7 @@ model User {
   commissionRules CommissionRule[] @relation("CommissionRuleDoctor")
   commissionEntries CommissionEntry[] @relation("CommissionEntryDoctor")
   issuedWarranties PatientWarranty[] @relation("WarrantyIssuer")
+  createdBackupJobs BackupJob[] @relation("BackupCreator")
 
   @@index([clinicId, role])
 }
@@ -666,6 +668,26 @@ model NotificationJob {
   clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Restrict)
 
   @@index([clinicId, status, scheduledAt])
+}
+
+model BackupJob {
+  id              String    @id @default(cuid())
+  clinicId        String
+  createdByUserId String
+  type            String    @default("MANUAL")
+  status          String    @default("PENDING")
+  storageKey      String?
+  summary         Json?
+  error           String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  clinic          Clinic    @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  createdBy       User      @relation("BackupCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([clinicId, status, createdAt])
+  @@index([clinicId, createdAt])
 }
 
 model Lead {

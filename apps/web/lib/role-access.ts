@@ -11,6 +11,7 @@ export type WorkspaceRoute =
   | "/finance"
   | "/commissions"
   | "/warranties"
+  | "/backups"
   | "/inventory"
   | "/reports"
   | "/administration"
@@ -84,6 +85,12 @@ export const navigation: NavigationItem[] = [
     label: "Zəmanətlər",
     icon: "warranty",
     roles: ["SUPER_ADMIN", "ADMIN", "DOCTOR", "NURSE", "CALL_CENTER", "MANAGEMENT"],
+  },
+  {
+    href: "/backups",
+    label: "Backup",
+    icon: "backup",
+    roles: ["SUPER_ADMIN", "ADMIN", "MANAGEMENT"],
   },
   {
     href: "/inventory",
