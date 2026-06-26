@@ -762,6 +762,7 @@ Status: `🟡 skelet hazır / real avtomatika mərhələli bağlanacaq`.
 - `✅` Rol və icazə xəritəsi skeleti: `/permissions`.
 - `✅` Audit jurnalı görünüşü: `/audit`.
 - `✅` Backup/update təhlükəsizliyi skeleti: `/backups`.
+- `✅` MVP yekun hazırlıq paneli: `/readiness`.
 - `✅` Navbar qruplaşdırıldı: Gündəlik iş, Klinik iş, Maliyyə və resurs, İdarəetmə.
 - `✅` Scroll ilə gizlənən uzun navbar yanaşması ləğv edildi; modullar dropdown qruplarında göstərilir.
 - `🟡` `MANAGEMENT` rolu hələ klinika tərəfindən təsdiqlənmədiyi üçün genişləndirilmədi.

@@ -17,6 +17,7 @@ export type WorkspaceRoute =
   | "/administration"
   | "/approvals"
   | "/backups"
+  | "/readiness"
   | "/permissions"
   | "/audit";
 
@@ -146,6 +147,13 @@ export const navigation: NavigationItem[] = [
     href: "/backups",
     label: "Backup",
     icon: "backup",
+    group: "admin",
+    roles: ["SUPER_ADMIN", "ADMIN"],
+  },
+  {
+    href: "/readiness",
+    label: "MVP yekun",
+    icon: "readiness",
     group: "admin",
     roles: ["SUPER_ADMIN", "ADMIN"],
   },
