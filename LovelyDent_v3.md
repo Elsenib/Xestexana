@@ -752,3 +752,18 @@ Hər backlog elementi ayrıca user story, biznes qaydası, ekran axını və acc
 
 - mentiqi duzgun qurmaq lazimdi. super admin icaze veren sexsdi. ondan sonra gelen rollar 
 ne edirse super adminin yekun icazesi ile edir. meselen admin hesabat isi gorur deyisiklik edende superadminin ekranina dusur super admin icaze verir ve ya vermir. super adminin icazesi olmadan hec bir deyisiklik edilmir. yada hekim asistani bir is gorur bu hekimin ekranina dusur hekim icaze verir ve ya vermir. mentiq beledi her bir rolun bir ustu onun rehberi sayilir. meselen anbarda deyisiklik olacaq anbar rolu deyisikliyi edir super adminin ekranina dusur ancaq heleki sadece ekranda gorsenir icaze verib vermemek kimi bir funksiyasi yoxdur. anbarda men bir mehsul yerlesdirdim. sonra bir miqdarini geri qaytarma etdim. sisteme bu dusdu. ancaq super admin tesdiqlemelidi ve anbarda o mehsuldan cixarilan miqdar avtomatik hesablanib anbar bilgisi yenilenmelidi. manuel hesablama hecbir yerde olmayacaq. her sey avtomatik olacaq. meselen hekim proseduru bitirdi. sistem avtomatik olaraq pasiyentin hesabina borc yazir. hekim faizi avtomatik hesablanir. kassir o borcu alir. sistem avtomatik olaraq pasiyentin borcunu azaldir, kassa qaligini artirir, hekim faizini yenileyir ve qebz yaradir. bu kimi her bir proses avtomatik olacaq. manual intervention olmayacaq. 
+
+## 21. İcra qeydləri — idarəetmə və UI/UX skeleti
+
+Status: `🟡 skelet hazır / real avtomatika mərhələli bağlanacaq`.
+
+- `✅` Super admin/admin üçün işçilərə tapşırıq vermə paneli: `/tasks`.
+- `✅` İşçilər öz tapşırıqlarını görür və status dəyişir.
+- `✅` Rol və icazə xəritəsi skeleti: `/permissions`.
+- `✅` Audit jurnalı görünüşü: `/audit`.
+- `✅` Backup/update təhlükəsizliyi skeleti: `/backups`.
+- `✅` Navbar qruplaşdırıldı: Gündəlik iş, Klinik iş, Maliyyə və resurs, İdarəetmə.
+- `✅` Scroll ilə gizlənən uzun navbar yanaşması ləğv edildi; modullar dropdown qruplarında göstərilir.
+- `🟡` `MANAGEMENT` rolu hələ klinika tərəfindən təsdiqlənmədiyi üçün genişləndirilmədi.
+- `⬜` Növbəti real mərhələ: approval engine-i bütün kritik əməliyyatlara bağlamaq.
+- `⬜` Növbəti real mərhələ: treatment → debt → payment → receipt → doctor commission axınını tam avtomatik etmək.

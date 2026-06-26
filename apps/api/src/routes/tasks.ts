@@ -29,17 +29,40 @@ const setActiveSchema = z.object({
   active: z.boolean()
 });
 
+const taskReaders = ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE", "CASHIER", "INVENTORY_MANAGER", "ACCOUNTANT"] as const;
+const taskManagers = ["SUPER_ADMIN", "ADMIN"] as const;
+const assignableRoles = ["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE", "CASHIER", "INVENTORY_MANAGER", "ACCOUNTANT"] as const;
+
 export async function taskRoutes(app: FastifyInstance) {
+  app.get(
+    "/tasks/assignees",
+    {
+      preHandler: [app.authenticate, app.authorize([...taskManagers])]
+    },
+    async (request) => {
+      const rows = await app.prisma.user.findMany({
+        where: {
+          clinicId: request.user.clinicId,
+          active: true,
+          role: { in: [...assignableRoles] }
+        },
+        select: { id: true, email: true, role: true, active: true },
+        orderBy: [{ role: "asc" }, { email: "asc" }]
+      });
+      return rows;
+    }
+  );
+
   app.get(
     "/tasks",
     {
-      preHandler: [app.authenticate, app.authorize(["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"])]
+      preHandler: [app.authenticate, app.authorize([...taskReaders])]
     },
     async (request) => {
       const query = listQuerySchema.parse(request.query);
       const clinicId = request.user.clinicId;
       const userId = request.user.sub;
-      const isAdmin = request.user.role === "ADMIN";
+      const canSeeAll = ["SUPER_ADMIN", "ADMIN"].includes(request.user.role);
       const now = new Date();
 
       const rows = await app.prisma.task.findMany({
@@ -50,7 +73,7 @@ export async function taskRoutes(app: FastifyInstance) {
           ...(query.priority ? { priority: query.priority } : {}),
           ...(query.active === undefined ? {} : { active: query.active }),
           ...(query.overdue ? { dueDate: { lt: now }, status: { in: ["PENDING", "IN_PROGRESS"] } } : {}),
-          ...(isAdmin ? {} : { assigneeUserId: userId })
+          ...(canSeeAll ? {} : { assigneeUserId: userId })
         },
         include: {
           assignee: {
@@ -97,7 +120,7 @@ export async function taskRoutes(app: FastifyInstance) {
   app.post(
     "/tasks",
     {
-      preHandler: [app.authenticate, app.authorize(["ADMIN"])]
+      preHandler: [app.authenticate, app.authorize([...taskManagers])]
     },
     async (request, reply) => {
       const body = createTaskSchema.parse(request.body);
@@ -118,7 +141,7 @@ export async function taskRoutes(app: FastifyInstance) {
           id: body.assigneeUserId,
           clinicId,
           active: true,
-          role: { in: ["CALL_CENTER", "DOCTOR", "NURSE", "ADMIN"] }
+          role: { in: [...assignableRoles] }
         },
         select: { id: true }
       });
@@ -148,14 +171,14 @@ export async function taskRoutes(app: FastifyInstance) {
   app.patch(
     "/tasks/:id/status",
     {
-      preHandler: [app.authenticate, app.authorize(["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE"])]
+      preHandler: [app.authenticate, app.authorize([...taskReaders])]
     },
     async (request, reply) => {
       const params = z.object({ id: z.string().min(1) }).parse(request.params);
       const body = updateStatusSchema.parse(request.body);
       const clinicId = request.user.clinicId;
       const userId = request.user.sub;
-      const isAdmin = request.user.role === "ADMIN";
+      const canManage = ["SUPER_ADMIN", "ADMIN"].includes(request.user.role);
 
       const task = await app.prisma.task.findFirst({
         where: { id: params.id, clinicId }
@@ -165,7 +188,7 @@ export async function taskRoutes(app: FastifyInstance) {
         return reply.code(404).send({ message: "Tapşırıq tapılmadı." });
       }
 
-      if (!isAdmin && task.assigneeUserId !== userId) {
+      if (!canManage && task.assigneeUserId !== userId) {
         return reply.code(403).send({ message: "Bu əməliyyat üçün icazəniz yoxdur." });
       }
 
@@ -197,7 +220,7 @@ export async function taskRoutes(app: FastifyInstance) {
   app.patch(
     "/tasks/:id/active",
     {
-      preHandler: [app.authenticate, app.authorize(["ADMIN"])]
+      preHandler: [app.authenticate, app.authorize([...taskManagers])]
     },
     async (request, reply) => {
       const params = z.object({ id: z.string().min(1) }).parse(request.params);

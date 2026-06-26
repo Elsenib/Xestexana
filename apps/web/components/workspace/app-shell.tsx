@@ -11,7 +11,7 @@ import {
   roleLabel,
   TOKEN_KEY,
 } from "../../lib/lovelydent-api";
-import { canAccessRoute, navigation, type WorkspaceRoute } from "../../lib/role-access";
+import { canAccessRoute, navigation, navigationGroups, type NavigationItem, type WorkspaceRoute } from "../../lib/role-access";
 
 function isNavActive(pathname: string | null, href: WorkspaceRoute) {
   if (!pathname) return false;
@@ -60,6 +60,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const visible = user
     ? navigation.filter((item) => item.roles.includes(user.role))
     : [];
+  const groupedNavigation = navigationGroups
+    .map((group) => ({
+      ...group,
+      items: visible.filter((item) => item.group === group.id),
+    }))
+    .filter((group) => group.items.length > 0);
 
   useEffect(() => {
     if (!user) return;
@@ -125,23 +131,29 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="ws-module-nav" aria-label="Modullar">
-          {visible.map((item) => {
-            const active = isNavActive(activePath, item.href);
+          {groupedNavigation.map((group) => {
+            const activeItem = group.items.find((item) => isNavActive(activePath, item.href));
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                prefetch
-                onClick={() => setPendingPath(item.href)}
-                className={active ? "active" : ""}
-                aria-current={active ? "page" : undefined}
-              >
-                <NavIcon name={item.icon} size={16} />
-                <span>{item.label}</span>
-                {item.href === "/approvals" && pendingApprovals > 0 && (
-                  <em className="ws-nav-badge">{pendingApprovals}</em>
-                )}
-              </Link>
+              <div className={`ws-nav-group ${activeItem ? "active" : ""}`} key={group.id}>
+                <button type="button" className="ws-nav-group-trigger">
+                  {activeItem ? <NavIcon name={activeItem.icon} size={16} /> : null}
+                  <span>{activeItem?.label ?? group.label}</span>
+                  {group.items.some((item) => item.href === "/approvals") && pendingApprovals > 0 && (
+                    <em className="ws-nav-badge">{pendingApprovals}</em>
+                  )}
+                </button>
+                <div className="ws-nav-group-menu">
+                  {group.items.map((item) => (
+                    <WorkspaceNavLink
+                      key={item.href}
+                      item={item}
+                      active={isNavActive(activePath, item.href)}
+                      pendingApprovals={pendingApprovals}
+                      onNavigate={() => setPendingPath(item.href)}
+                    />
+                  ))}
+                </div>
+              </div>
             );
           })}
         </nav>
@@ -153,5 +165,33 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <main className="ws-main">{children}</main>
     </div>
+  );
+}
+
+function WorkspaceNavLink({
+  item,
+  active,
+  pendingApprovals,
+  onNavigate,
+}: {
+  item: NavigationItem;
+  active: boolean;
+  pendingApprovals: number;
+  onNavigate: () => void;
+}) {
+  return (
+    <Link
+      href={item.href}
+      prefetch
+      onClick={onNavigate}
+      className={active ? "active" : ""}
+      aria-current={active ? "page" : undefined}
+    >
+      <NavIcon name={item.icon} size={16} />
+      <span>{item.label}</span>
+      {item.href === "/approvals" && pendingApprovals > 0 && (
+        <em className="ws-nav-badge">{pendingApprovals}</em>
+      )}
+    </Link>
   );
 }

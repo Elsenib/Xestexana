@@ -25,7 +25,7 @@ const statusSchema = z.object({ active: z.boolean() });
 export async function adminUserRoutes(app: FastifyInstance) {
   app.get(
     "/admin-users",
-    { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN"])] },
     async (request) => {
       const query = listQuerySchema.parse(request.query);
       const clinicId = request.user.clinicId; // ✅ əlavə edildi
@@ -45,7 +45,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.post(
     "/admin-users",
-    { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN"])] },
     async (request, reply) => {
       const body = createAdminSchema.parse(request.body);
       const passwordHash = await bcrypt.hash(body.password, 10);
@@ -69,7 +69,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.patch(
     "/admin-users/:id/deactivate",
-    { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN"])] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       if (id === request.user.sub) {
@@ -97,7 +97,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.patch(
     "/admin-users/:id/status",
-    { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN"])] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const { active } = statusSchema.parse(request.body);
@@ -129,7 +129,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.delete(
     "/admin-users/:id",
-    { preHandler: [app.authenticate, app.authorize(["ADMIN"])] },
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN"])] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       if (id === request.user.sub) {

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 export type NavIconId =
   | "dashboard"
+  | "tasks"
   | "calendar"
   | "patients"
   | "crm"
@@ -11,6 +12,8 @@ export type NavIconId =
   | "commission"
   | "warranty"
   | "backup"
+  | "permissions"
+  | "audit"
   | "inventory"
   | "reports"
   | "administration"
@@ -27,6 +30,12 @@ const paths: Record<NavIconId, ReactNode> = {
   dashboard: (
     <>
       <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z" />
+    </>
+  ),
+  tasks: (
+    <>
+      <path d="M8 6h11M8 12h11M8 18h11" />
+      <path d="m4 6 .8.8L6.5 5M4 12l.8.8L6.5 11M4 18l.8.8L6.5 17" />
     </>
   ),
   calendar: (
@@ -84,6 +93,20 @@ const paths: Record<NavIconId, ReactNode> = {
       <path d="M12 3a9 9 0 1 1-8.1 5.1" />
       <path d="M4 4v4h4" />
       <path d="M12 8v5l3 2" />
+    </>
+  ),
+  permissions: (
+    <>
+      <circle cx="8" cy="8" r="3" />
+      <path d="M3 20c.7-3 2.7-5 5-5" />
+      <path d="M14 14l2 2 5-5" />
+      <path d="M14 20h7" />
+    </>
+  ),
+  audit: (
+    <>
+      <path d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+      <path d="M14 3v5h5M8 13h8M8 17h6" />
     </>
   ),
   inventory: (
