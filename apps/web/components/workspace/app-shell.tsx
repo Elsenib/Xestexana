@@ -11,7 +11,14 @@ import {
   roleLabel,
   TOKEN_KEY,
 } from "../../lib/lovelydent-api";
-import { canAccessRoute, navigation, navigationGroups, type NavigationItem, type WorkspaceRoute } from "../../lib/role-access";
+import {
+  canAccessRoute,
+  navigation,
+  navigationGroups,
+  type NavigationGroup,
+  type NavigationItem,
+  type WorkspaceRoute,
+} from "../../lib/role-access";
 
 function isNavActive(pathname: string | null, href: WorkspaceRoute) {
   if (!pathname) return false;
@@ -25,6 +32,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [openGroup, setOpenGroup] = useState<NavigationGroup | null>(null);
 
   useEffect(() => {
     if (!localStorage.getItem(TOKEN_KEY)) {
@@ -55,6 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setPendingPath(null);
+    setOpenGroup(null);
   }, [pathname]);
 
   const visible = user
@@ -134,8 +143,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           {groupedNavigation.map((group) => {
             const activeItem = group.items.find((item) => isNavActive(activePath, item.href));
             return (
-              <div className={`ws-nav-group ${activeItem ? "active" : ""}`} key={group.id}>
-                <button type="button" className="ws-nav-group-trigger">
+              <div
+                className={`ws-nav-group ${activeItem ? "active" : ""} ${openGroup === group.id ? "open" : ""}`}
+                key={group.id}
+                onMouseEnter={() => setOpenGroup(group.id)}
+                onMouseLeave={() => setOpenGroup(null)}
+              >
+                <button
+                  type="button"
+                  className="ws-nav-group-trigger"
+                  aria-expanded={openGroup === group.id}
+                  onClick={() => setOpenGroup((current) => (current === group.id ? null : group.id))}
+                  onFocus={() => setOpenGroup(group.id)}
+                >
                   {activeItem ? <NavIcon name={activeItem.icon} size={16} /> : null}
                   <span>{activeItem?.label ?? group.label}</span>
                   {group.items.some((item) => item.href === "/approvals") && pendingApprovals > 0 && (
@@ -149,7 +169,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                       item={item}
                       active={isNavActive(activePath, item.href)}
                       pendingApprovals={pendingApprovals}
-                      onNavigate={() => setPendingPath(item.href)}
+                      onNavigate={() => {
+                        setPendingPath(item.href);
+                        setOpenGroup(null);
+                      }}
                     />
                   ))}
                 </div>
