@@ -12,7 +12,6 @@ export type NavIconId =
   | "commission"
   | "warranty"
   | "backup"
-  | "readiness"
   | "permissions"
   | "audit"
   | "inventory"
@@ -94,12 +93,6 @@ const paths: Record<NavIconId, ReactNode> = {
       <path d="M12 3a9 9 0 1 1-8.1 5.1" />
       <path d="M4 4v4h4" />
       <path d="M12 8v5l3 2" />
-    </>
-  ),
-  readiness: (
-    <>
-      <path d="M4 5h16M4 12h10M4 19h7" />
-      <path d="m15 17 2 2 4-5" />
     </>
   ),
   permissions: (

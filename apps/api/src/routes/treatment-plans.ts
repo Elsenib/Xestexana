@@ -7,9 +7,22 @@ import {
   createApprovalRequest,
   shouldAutoApply,
 } from "../services/approval-service.js";
+import {
+  allocateExistingCreditsToCharge,
+  createChargeCommission,
+  recordCharge,
+  roundMoney,
+} from "../services/finance-service.js";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+  actorFromRequest,
+  auditRequestMeta,
+  recordAudit,
+} from "../services/audit-service.js";
 
-const clinicalReaders = ["ADMIN", "CALL_CENTER", "DOCTOR", "NURSE", "CASHIER", "ACCOUNTANT"] as const;
-const clinicalAuthors = ["ADMIN", "DOCTOR"] as const;
+const clinicalReaders = ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE", "CASHIER", "ACCOUNTANT"] as const;
+const clinicalAuthors = ["SUPER_ADMIN", "ADMIN", "DOCTOR"] as const;
 const serviceSchema = z.object({
   code: z.string().trim().min(2).max(40).transform((value) => value.toUpperCase()),
   name: z.string().trim().min(2).max(200), category: z.string().trim().min(2).max(100),
@@ -29,6 +42,33 @@ const createPlanSchema = planContentSchema.extend({ patientId: z.string().min(1)
 const listPlanQuery = z.object({ patientId: z.string().min(1).optional(), take: z.coerce.number().int().min(1).max(200).default(100) });
 const idParams = z.object({ id: z.string().min(1) });
 const statusSchema = z.object({ status: z.enum(["PRESENTED", "ACCEPTED", "PARTIALLY_ACCEPTED", "IN_PROGRESS", "COMPLETED", "CANCELED"]) });
+
+function netItemAmount(
+  items: Array<{ id: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal }>,
+  discount: Prisma.Decimal,
+  targetId: string,
+) {
+  const priced = items
+    .map((item) => ({
+      id: item.id,
+      gross: Math.round(item.quantity.toNumber() * item.unitPrice.toNumber() * 100),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const grossTotal = priced.reduce((sum, item) => sum + item.gross, 0);
+  if (grossTotal <= 0) return 0;
+  const netTotal = Math.max(0, grossTotal - Math.round(discount.toNumber() * 100));
+  const allocations = priced.map((item) => {
+    const exact = (netTotal * item.gross) / grossTotal;
+    return { ...item, cents: Math.floor(exact), fraction: exact - Math.floor(exact) };
+  });
+  let remainder = netTotal - allocations.reduce((sum, item) => sum + item.cents, 0);
+  for (const item of [...allocations].sort((a, b) => b.fraction - a.fraction || a.id.localeCompare(b.id))) {
+    if (remainder <= 0) break;
+    item.cents += 1;
+    remainder -= 1;
+  }
+  return roundMoney((allocations.find((item) => item.id === targetId)?.cents ?? 0) / 100);
+}
 
 async function resolvedItems(app: FastifyInstance, clinicId: string, items: z.infer<typeof itemSchema>[]) {
   const ids = [...new Set(items.map((item) => item.serviceId))];
@@ -150,8 +190,122 @@ export async function treatmentPlanRoutes(app: FastifyInstance) {
     const { id } = idParams.parse(request.params); const { status } = statusSchema.parse(request.body);
     const plan = await app.prisma.treatmentPlan.findFirst({ where: { id, clinicId: request.user.clinicId, ...(request.user.role === "DOCTOR" ? { doctorUserId: request.user.sub } : {}) } });
     if (!plan) return reply.code(404).send({ message: "Müalicə planı tapılmadı." });
-    const allowed: Record<string, string[]> = { DRAFT: ["PRESENTED", "CANCELED"], PRESENTED: ["ACCEPTED", "PARTIALLY_ACCEPTED", "CANCELED"], ACCEPTED: ["IN_PROGRESS", "CANCELED"], PARTIALLY_ACCEPTED: ["IN_PROGRESS", "CANCELED"], IN_PROGRESS: ["COMPLETED", "CANCELED"], COMPLETED: [], CANCELED: [] };
+    const allowed: Record<string, string[]> = { DRAFT: ["PRESENTED", "CANCELED"], PRESENTED: ["ACCEPTED", "PARTIALLY_ACCEPTED", "CANCELED"], ACCEPTED: ["IN_PROGRESS", "CANCELED"], PARTIALLY_ACCEPTED: ["IN_PROGRESS", "CANCELED"], IN_PROGRESS: ["CANCELED"], COMPLETED: [], CANCELED: [] };
     if (!allowed[plan.status]?.includes(status)) return reply.code(409).send({ message: `${plan.status} statusundan ${status} statusuna keçmək olmaz.` });
     return app.prisma.treatmentPlan.update({ where: { id }, data: { status } });
+  });
+
+  app.post("/treatment-plan-items/:id/complete", { preHandler: [app.authenticate, app.authorize([...clinicalAuthors])] }, async (request, reply) => {
+    const { id } = idParams.parse(request.params);
+    const clinicId = request.user.clinicId;
+    const userId = request.user.sub!;
+
+    const result = await app.prisma.$transaction(async (tx) => {
+      const item = await tx.treatmentPlanItem.findFirst({
+        where: {
+          id,
+          treatmentPlanVersion: {
+            clinicId,
+            treatmentPlan: request.user.role === "DOCTOR" ? { doctorUserId: userId } : {},
+          },
+        },
+        include: {
+          service: true,
+          treatmentPlanVersion: {
+            include: { items: true, treatmentPlan: true },
+          },
+        },
+      });
+      if (!item) return { error: "NOT_FOUND" as const };
+
+      const version = item.treatmentPlanVersion;
+      const plan = version.treatmentPlan;
+      if (version.version !== plan.currentVersion) return { error: "OLD_VERSION" as const };
+      if (!["ACCEPTED", "PARTIALLY_ACCEPTED", "IN_PROGRESS"].includes(plan.status)) {
+        return { error: "INVALID_STATUS" as const };
+      }
+      if (item.status === "COMPLETED" || item.accountEntryId) return { error: "ALREADY_COMPLETED" as const };
+
+      const amount = netItemAmount(version.items, version.discount, item.id);
+      let accountEntryId: string | null = null;
+      let commissionAmount = 0;
+
+      if (amount > 0) {
+        const charge = await recordCharge(tx, {
+          clinicId,
+          patientId: plan.patientId,
+          createdByUserId: userId,
+          description: `${item.service.name}${item.tooth ? ` · diş ${item.tooth}` : ""}`,
+          amount,
+          serviceId: item.serviceId,
+          referenceType: "TreatmentPlanItem",
+          referenceId: item.id,
+        });
+        accountEntryId = charge.id;
+        const commission = await createChargeCommission(tx, {
+          clinicId,
+          doctorUserId: plan.doctorUserId,
+          patientId: plan.patientId,
+          serviceId: item.serviceId,
+          chargeEntryId: charge.id,
+          baseAmount: amount,
+          note: `${item.service.name} xidməti`,
+        });
+        commissionAmount = commission?.amount.toNumber() ?? 0;
+        await allocateExistingCreditsToCharge(tx, {
+          clinicId,
+          patientId: plan.patientId,
+          chargeEntryId: charge.id,
+        });
+      }
+
+      await tx.treatmentPlanItem.update({
+        where: { id: item.id },
+        data: {
+          status: "COMPLETED",
+          completedAt: new Date(),
+          completedByUserId: userId,
+          accountEntryId,
+        },
+      });
+
+      const hasRemaining = version.items.some((candidate) => candidate.id !== item.id && candidate.status !== "COMPLETED");
+      await tx.treatmentPlan.update({
+        where: { id: plan.id },
+        data: { status: hasRemaining ? "IN_PROGRESS" : "COMPLETED" },
+      });
+
+      return {
+        itemId: item.id,
+        planId: plan.id,
+        patientId: plan.patientId,
+        amount,
+        commissionAmount,
+        planStatus: hasRemaining ? "IN_PROGRESS" : "COMPLETED",
+      };
+    });
+
+    if ("error" in result && result.error) {
+      const messages = {
+        NOT_FOUND: "Müalicə sətri tapılmadı.",
+        OLD_VERSION: "Yalnız planın cari versiyası icra edilə bilər.",
+        INVALID_STATUS: "Plan əvvəlcə pasiyent tərəfindən qəbul edilməlidir.",
+        ALREADY_COMPLETED: "Bu xidmət artıq tamamlanıb.",
+      } as const;
+      return reply.code(result.error === "NOT_FOUND" ? 404 : 409).send({ message: messages[result.error] });
+    }
+
+    await recordAudit(app.prisma, {
+      ...actorFromRequest(request),
+      ...auditRequestMeta(request),
+      category: AUDIT_CATEGORIES.CLINICAL,
+      action: AUDIT_ACTIONS.TREATMENT_ITEM_COMPLETED,
+      entityType: "TreatmentPlanItem",
+      entityId: result.itemId,
+      summary: `Müalicə xidməti tamamlandı · ${result.amount.toFixed(2)} ₼`,
+      details: result,
+    });
+
+    return reply.send(result);
   });
 }

@@ -8,7 +8,7 @@ export const ENTRY_TYPES = {
   DISCOUNT: "DISCOUNT",
 } as const;
 
-export const PAYMENT_METHODS = ["CASH", "CARD", "TRANSFER", "DEPOSIT"] as const;
+export const PAYMENT_METHODS = ["CASH", "CARD", "TRANSFER"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 type Tx = Omit<
@@ -60,7 +60,7 @@ export async function computeCashSessionExpected(
   return roundMoney(openingBalance.toNumber() + cashIn);
 }
 
-function roundMoney(value: number) {
+export function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
@@ -122,6 +122,215 @@ export async function recordCharge(
   });
 }
 
+async function resolveCommissionPercent(
+  tx: Tx,
+  clinicId: string,
+  doctorUserId: string,
+  serviceId: string | null,
+) {
+  const rules = await tx.commissionRule.findMany({
+    where: {
+      clinicId,
+      active: true,
+      AND: [
+        { OR: [{ doctorUserId }, { doctorUserId: null }] },
+        serviceId ? { OR: [{ serviceId }, { serviceId: null }] } : { serviceId: null },
+      ],
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const ranked = rules
+    .map((rule) => ({
+      rule,
+      score: (rule.doctorUserId === doctorUserId ? 2 : 0) + (serviceId && rule.serviceId === serviceId ? 1 : 0),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  return ranked[0]?.rule.percent.toNumber() ?? null;
+}
+
+async function syncChargeCommission(tx: Tx, clinicId: string, chargeEntryId: string) {
+  const commission = await tx.commissionEntry.findFirst({
+    where: { clinicId, sourceType: "SERVICE_CHARGE", sourceId: chargeEntryId },
+  });
+  if (!commission) return null;
+
+  const allocations = await tx.patientAccountAllocation.aggregate({
+    where: { clinicId, debitEntryId: chargeEntryId },
+    _sum: { amount: true },
+  });
+  const paidBaseAmount = Math.min(
+    commission.baseAmount.toNumber(),
+    roundMoney(allocations._sum.amount?.toNumber() ?? 0),
+  );
+  const earnedAmount = roundMoney((paidBaseAmount * commission.percent.toNumber()) / 100);
+  const fullyEarned = paidBaseAmount >= commission.baseAmount.toNumber() - 0.009;
+
+  return tx.commissionEntry.update({
+    where: { id: commission.id },
+    data: {
+      paidBaseAmount,
+      earnedAmount,
+      status: fullyEarned ? "EARNED" : paidBaseAmount > 0 ? "PARTIAL" : "PENDING",
+      earnedAt: fullyEarned ? commission.earnedAt ?? new Date() : null,
+    },
+  });
+}
+
+export async function createChargeCommission(
+  tx: Tx,
+  input: {
+    clinicId: string;
+    doctorUserId: string;
+    patientId: string;
+    serviceId: string | null;
+    chargeEntryId: string;
+    baseAmount: number;
+    note?: string | null;
+  },
+) {
+  const existing = await tx.commissionEntry.findFirst({
+    where: { clinicId: input.clinicId, sourceType: "SERVICE_CHARGE", sourceId: input.chargeEntryId },
+  });
+  if (existing) return existing;
+
+  const percent = await resolveCommissionPercent(
+    tx,
+    input.clinicId,
+    input.doctorUserId,
+    input.serviceId,
+  );
+  if (percent === null || percent <= 0) return null;
+
+  await tx.commissionEntry.create({
+    data: {
+      clinicId: input.clinicId,
+      doctorUserId: input.doctorUserId,
+      patientId: input.patientId,
+      sourceType: "SERVICE_CHARGE",
+      sourceId: input.chargeEntryId,
+      baseAmount: input.baseAmount,
+      percent,
+      amount: roundMoney((input.baseAmount * percent) / 100),
+      note: input.note ?? null,
+    },
+  });
+
+  return syncChargeCommission(tx, input.clinicId, input.chargeEntryId);
+}
+
+async function allocateAmount(
+  tx: Tx,
+  input: { clinicId: string; debitEntryId: string; creditEntryId: string; amount: number },
+) {
+  if (input.amount <= 0) return;
+  await tx.patientAccountAllocation.create({
+    data: {
+      clinicId: input.clinicId,
+      debitEntryId: input.debitEntryId,
+      creditEntryId: input.creditEntryId,
+      amount: roundMoney(input.amount),
+    },
+  });
+  await syncChargeCommission(tx, input.clinicId, input.debitEntryId);
+}
+
+export async function allocateCreditToCharges(
+  tx: Tx,
+  input: { clinicId: string; patientId: string; creditEntryId: string },
+) {
+  const credit = await tx.patientAccountEntry.findFirst({
+    where: {
+      id: input.creditEntryId,
+      clinicId: input.clinicId,
+      patientId: input.patientId,
+      direction: "CREDIT",
+    },
+    include: { creditAllocations: { select: { amount: true } } },
+  });
+  if (!credit) throw new Error("CREDIT_ENTRY_NOT_FOUND");
+
+  let remaining = roundMoney(
+    credit.amount.toNumber() - credit.creditAllocations.reduce((sum, row) => sum + row.amount.toNumber(), 0),
+  );
+  if (remaining <= 0) return;
+
+  const charges = await tx.patientAccountEntry.findMany({
+    where: {
+      clinicId: input.clinicId,
+      patientId: input.patientId,
+      entryType: ENTRY_TYPES.SERVICE_CHARGE,
+      direction: "DEBIT",
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    include: { debitAllocations: { select: { amount: true } } },
+  });
+
+  for (const charge of charges) {
+    if (remaining <= 0) break;
+    const allocated = charge.debitAllocations.reduce((sum, row) => sum + row.amount.toNumber(), 0);
+    const outstanding = roundMoney(charge.amount.toNumber() - allocated);
+    if (outstanding <= 0) continue;
+    const amount = Math.min(remaining, outstanding);
+    await allocateAmount(tx, {
+      clinicId: input.clinicId,
+      debitEntryId: charge.id,
+      creditEntryId: credit.id,
+      amount,
+    });
+    remaining = roundMoney(remaining - amount);
+  }
+}
+
+export async function allocateExistingCreditsToCharge(
+  tx: Tx,
+  input: { clinicId: string; patientId: string; chargeEntryId: string },
+) {
+  const charge = await tx.patientAccountEntry.findFirst({
+    where: {
+      id: input.chargeEntryId,
+      clinicId: input.clinicId,
+      patientId: input.patientId,
+      entryType: ENTRY_TYPES.SERVICE_CHARGE,
+      direction: "DEBIT",
+    },
+    include: { debitAllocations: { select: { amount: true } } },
+  });
+  if (!charge) throw new Error("CHARGE_ENTRY_NOT_FOUND");
+
+  let outstanding = roundMoney(
+    charge.amount.toNumber() - charge.debitAllocations.reduce((sum, row) => sum + row.amount.toNumber(), 0),
+  );
+  if (outstanding <= 0) return;
+
+  const credits = await tx.patientAccountEntry.findMany({
+    where: {
+      clinicId: input.clinicId,
+      patientId: input.patientId,
+      direction: "CREDIT",
+      entryType: { in: [ENTRY_TYPES.PAYMENT, ENTRY_TYPES.DEPOSIT] },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    include: { creditAllocations: { select: { amount: true } } },
+  });
+
+  for (const credit of credits) {
+    if (outstanding <= 0) break;
+    const alreadyUsed = credit.creditAllocations.reduce((sum, row) => sum + row.amount.toNumber(), 0);
+    const available = roundMoney(credit.amount.toNumber() - alreadyUsed);
+    if (available <= 0) continue;
+    const amount = Math.min(outstanding, available);
+    await allocateAmount(tx, {
+      clinicId: input.clinicId,
+      debitEntryId: charge.id,
+      creditEntryId: credit.id,
+      amount,
+    });
+    outstanding = roundMoney(outstanding - amount);
+  }
+}
+
 export async function recordPayment(
   tx: Tx,
   input: {
@@ -143,6 +352,11 @@ export async function recordPayment(
   });
   if (!patient) throw new Error("PATIENT_NOT_FOUND");
 
+  const balance = await computePatientBalance(tx, input.clinicId, input.patientId);
+  if (balance <= 0 || input.amount > balance + 0.009) {
+    throw new Error("PAYMENT_EXCEEDS_BALANCE");
+  }
+
   if (input.paymentMethod === "CASH") {
     if (!input.cashSessionId) throw new Error("CASH_SESSION_REQUIRED");
     const session = await tx.cashSession.findFirst({
@@ -151,12 +365,7 @@ export async function recordPayment(
     if (!session) throw new Error("CASH_SESSION_CLOSED");
   }
 
-  if (input.paymentMethod === "DEPOSIT") {
-    const depositBalance = await computeDepositBalance(tx, input.clinicId, input.patientId);
-    if (depositBalance < input.amount) throw new Error("INSUFFICIENT_DEPOSIT");
-  }
-
-  return tx.patientAccountEntry.create({
+  const entry = await tx.patientAccountEntry.create({
     data: {
       clinicId: input.clinicId,
       patientId: input.patientId,
@@ -170,6 +379,12 @@ export async function recordPayment(
       createdByUserId: input.createdByUserId,
     },
   });
+  await allocateCreditToCharges(tx, {
+    clinicId: input.clinicId,
+    patientId: input.patientId,
+    creditEntryId: entry.id,
+  });
+  return entry;
 }
 
 export async function createChargesFromLines(
@@ -181,6 +396,7 @@ export async function createChargesFromLines(
     referenceType: string;
     referenceId: string;
     lines: ChargeLineInput[];
+    doctorUserId?: string | null;
   },
 ) {
   const created = [];
@@ -211,6 +427,22 @@ export async function createChargesFromLines(
       referenceId: input.referenceId,
     });
     created.push(entry);
+    if (input.doctorUserId) {
+      await createChargeCommission(tx, {
+        clinicId: input.clinicId,
+        doctorUserId: input.doctorUserId,
+        patientId: input.patientId,
+        serviceId,
+        chargeEntryId: entry.id,
+        baseAmount: amount,
+        note: line.description,
+      });
+    }
+    await allocateExistingCreditsToCharge(tx, {
+      clinicId: input.clinicId,
+      patientId: input.patientId,
+      chargeEntryId: entry.id,
+    });
   }
   return created;
 }
@@ -226,7 +458,7 @@ export async function createEncounterCharges(
 ) {
   const encounter = await tx.clinicalEncounter.findFirst({
     where: { id: input.encounterId, clinicId: input.clinicId },
-    select: { id: true, patientId: true, status: true },
+    select: { id: true, patientId: true, doctorUserId: true, status: true },
   });
   if (!encounter) throw new Error("ENCOUNTER_NOT_FOUND");
   if (encounter.status !== "COMPLETED") throw new Error("ENCOUNTER_NOT_COMPLETED");
@@ -238,6 +470,7 @@ export async function createEncounterCharges(
     referenceType: "ClinicalEncounter",
     referenceId: encounter.id,
     lines: input.lines,
+    doctorUserId: encounter.doctorUserId,
   });
 }
 
@@ -270,6 +503,7 @@ export async function applyEncounterCompletionWithCharges(
       referenceType: "ClinicalEncounter",
       referenceId: encounter.id,
       lines: input.charges,
+      doctorUserId: encounter.doctorUserId,
     });
   }
 
@@ -328,21 +562,18 @@ export async function computeDepositBalance(tx: Tx, clinicId: string, patientId:
     where: {
       clinicId,
       patientId,
-      OR: [
-        { entryType: ENTRY_TYPES.DEPOSIT, direction: "CREDIT" },
-        { entryType: ENTRY_TYPES.PAYMENT, paymentMethod: "DEPOSIT" },
-      ],
+      entryType: ENTRY_TYPES.DEPOSIT,
+      direction: "CREDIT",
     },
-    select: { entryType: true, amount: true, paymentMethod: true },
+    include: { creditAllocations: { select: { amount: true } } },
   });
-  let balance = 0;
-  for (const row of rows) {
-    if (row.entryType === ENTRY_TYPES.DEPOSIT) balance += row.amount.toNumber();
-    if (row.entryType === ENTRY_TYPES.PAYMENT && row.paymentMethod === "DEPOSIT") {
-      balance -= row.amount.toNumber();
-    }
-  }
-  return roundMoney(balance);
+  return roundMoney(
+    rows.reduce(
+      (sum, row) =>
+        sum + row.amount.toNumber() - row.creditAllocations.reduce((used, item) => used + item.amount.toNumber(), 0),
+      0,
+    ),
+  );
 }
 
 export async function recordDeposit(
@@ -374,7 +605,7 @@ export async function recordDeposit(
     if (!session) throw new Error("CASH_SESSION_CLOSED");
   }
 
-  return tx.patientAccountEntry.create({
+  const entry = await tx.patientAccountEntry.create({
     data: {
       clinicId: input.clinicId,
       patientId: input.patientId,
@@ -388,6 +619,12 @@ export async function recordDeposit(
       createdByUserId: input.createdByUserId,
     },
   });
+  await allocateCreditToCharges(tx, {
+    clinicId: input.clinicId,
+    patientId: input.patientId,
+    creditEntryId: entry.id,
+  });
+  return entry;
 }
 
 export async function recordRefund(

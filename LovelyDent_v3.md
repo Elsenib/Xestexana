@@ -732,11 +732,11 @@ Funksiya yalnız aşağıdakılar tamamlandıqda hazır sayılır:
 3. ✅ Pasiyent və anamnez — pasiyent reyestri, klinik kart və versiyalanan anamnez işləyir.
 4. 🟡 Həkim qrafiki və randevu təqvimi — qrafik, uyğun vaxt və status axını var; həftəlik vizual təqvim genişləndirilməlidir.
 5. 🟡 Odontogram və klinik qəbul — versiyalanan odontogram, anamnez, klinik qəbulun qaralama və imzalanmış tamamlanma axını işləyir; düzəliş və müalicə planına keçid tamamlanmalıdır.
-6. 🟡 Müalicə planı və xidmət kataloqu — xidmət/qiymət kataloqu, plan sətirləri, diş və miqdar, endirim, serverdə sabitlənən qiymət, plan versiyası və status axını işləyir; razılıq sənədi və plan sətrinin prosedura çevrilməsi qalır.
-7. 🟡 Pasiyent hesabı, ödəniş və kassa növbəsi — ilkin maliyyə ekranı var; real hesab və kassa modeli qurulmalıdır.
-8. ⬜ Avtomatik hesablama mühərriki, ledger-lər və period bağlanması.
-9. ⬜ Fayl storage və sənədlər.
-10. ⬜ Bildiriş queue-su və randevu xatırlatması.
+6. 🟡 Müalicə planı və xidmət kataloqu — xidmət/qiymət kataloqu, plan sətirləri, diş və miqdar, endirim, serverdə sabitlənən qiymət, plan versiyası və status axını işləyir; qəbul edilmiş plan sətri real prosedur kimi tamamlanır və borca çevrilir; razılıq sənədi qalır.
+7. 🟡 Pasiyent hesabı, ödəniş və kassa növbəsi — real ledger, tam/qismən ödəniş, depozit, qəbz və kassa növbəsi işləyir; refund/reversal və reconciliation daha sərt biznes qaydaları ilə tamamlanmalıdır.
+8. 🟡 Avtomatik hesablama mühərriki, ledger-lər və period bağlanması — prosedur → borc → FIFO ödəniş bölgüsü → qəbz → ödənən hissəyə görə həkim komissiyası tranzaksiyalı işləyir; reversal təsiri və komissiya period hesablaşması qalır.
+9. ✅ Fayl storage və sənədlər — pasiyent faylları verilənlər bazasında saxlanır, önbaxış, açma və endirmə işləyir.
+10. 🟡 Bildiriş queue-su və randevu xatırlatması — queue və recall tapşırıqları var; real SMS/WhatsApp/e-mail provider inteqrasiyası klinikanın seçiminə bağlıdır.
 11. 🟡 Mənbə əməliyyata qədər açıla bilən avtomatik dashboard və hesabatlar — ilkin əməliyyat göstəriciləri var; maliyyə drill-down-u ledger-dən sonra tamamlanacaq.
 
 Əlavə görülmüş iş: `✅` tapşırıq sistemi skeleti, `✅` rol əsaslı iş sahəsi, `✅` Railway API deploy və health yoxlaması.
@@ -753,18 +753,17 @@ Hər backlog elementi ayrıca user story, biznes qaydası, ekran axını və acc
 - mentiqi duzgun qurmaq lazimdi. super admin icaze veren sexsdi. ondan sonra gelen rollar 
 ne edirse super adminin yekun icazesi ile edir. meselen admin hesabat isi gorur deyisiklik edende superadminin ekranina dusur super admin icaze verir ve ya vermir. super adminin icazesi olmadan hec bir deyisiklik edilmir. yada hekim asistani bir is gorur bu hekimin ekranina dusur hekim icaze verir ve ya vermir. mentiq beledi her bir rolun bir ustu onun rehberi sayilir. meselen anbarda deyisiklik olacaq anbar rolu deyisikliyi edir super adminin ekranina dusur ancaq heleki sadece ekranda gorsenir icaze verib vermemek kimi bir funksiyasi yoxdur. anbarda men bir mehsul yerlesdirdim. sonra bir miqdarini geri qaytarma etdim. sisteme bu dusdu. ancaq super admin tesdiqlemelidi ve anbarda o mehsuldan cixarilan miqdar avtomatik hesablanib anbar bilgisi yenilenmelidi. manuel hesablama hecbir yerde olmayacaq. her sey avtomatik olacaq. meselen hekim proseduru bitirdi. sistem avtomatik olaraq pasiyentin hesabina borc yazir. hekim faizi avtomatik hesablanir. kassir o borcu alir. sistem avtomatik olaraq pasiyentin borcunu azaldir, kassa qaligini artirir, hekim faizini yenileyir ve qebz yaradir. bu kimi her bir proses avtomatik olacaq. manual intervention olmayacaq. 
 
-## 21. İcra qeydləri — idarəetmə və UI/UX skeleti
+## 21. İcra qeydləri — idarəetmə və real iş axını
 
-Status: `🟡 skelet hazır / real avtomatika mərhələli bağlanacaq`.
+Status: `🟡 əsas klinik-maliyyə avtomatikası işləyir / qalan plan maddələri mərhələli bağlanır`.
 
 - `✅` Super admin/admin üçün işçilərə tapşırıq vermə paneli: `/tasks`.
 - `✅` İşçilər öz tapşırıqlarını görür və status dəyişir.
-- `✅` Rol və icazə xəritəsi skeleti: `/permissions`.
+- `✅` Rol və icazə xəritəsi: `/permissions`.
 - `✅` Audit jurnalı görünüşü: `/audit`.
-- `✅` Backup/update təhlükəsizliyi skeleti: `/backups`.
-- `✅` MVP yekun hazırlıq paneli: `/readiness`.
+- `🟡` Backup/update nəzarəti: `/backups`; real off-site dump və bərpa sınağı tamamlanmalıdır.
 - `✅` Navbar qruplaşdırıldı: Gündəlik iş, Klinik iş, Maliyyə və resurs, İdarəetmə.
 - `✅` Scroll ilə gizlənən uzun navbar yanaşması ləğv edildi; modullar dropdown qruplarında göstərilir.
 - `🟡` `MANAGEMENT` rolu hələ klinika tərəfindən təsdiqlənmədiyi üçün genişləndirilmədi.
-- `⬜` Növbəti real mərhələ: approval engine-i bütün kritik əməliyyatlara bağlamaq.
-- `⬜` Növbəti real mərhələ: treatment → debt → payment → receipt → doctor commission axınını tam avtomatik etmək.
+- `🟡` Approval engine kritik klinik, xidmət və stok əməliyyatlarına bağlıdır; maliyyə reversal və manual adjustment axınına genişləndirilməlidir.
+- `✅` treatment → debt → FIFO payment allocation → receipt → paid doctor commission axını server tranzaksiyasında avtomatik işləyir.

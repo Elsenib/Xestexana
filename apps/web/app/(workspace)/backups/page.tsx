@@ -78,7 +78,7 @@ export default function BackupsPage() {
         <div>
           <p className="ws-eyebrow">Data safety · Skelet</p>
           <h1>Backup və update təhlükəsizliyi</h1>
-          <span>Bu panel real dump mexanizminə hazırlanmış skeletdir. İndi məlumat saylarını və backup job tarixçəsini saxlayır.</span>
+          <span>Məlumat saylarını, backup əməliyyatlarını və nəticə tarixçəsini bir yerdə izləyin.</span>
         </div>
       </section>
 

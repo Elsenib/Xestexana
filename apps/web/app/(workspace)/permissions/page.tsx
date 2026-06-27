@@ -19,7 +19,7 @@ export default function PermissionsPage() {
     <div>
       <section className="ws-page-head">
         <div>
-          <p className="ws-eyebrow">İdarəetmə skeleti</p>
+          <p className="ws-eyebrow">Rol və səlahiyyətlər</p>
           <h1>Rol və icazə xəritəsi</h1>
           <span>Bu mərhələ sabit permission matrix-dir. Sonrakı real mərhələdə DB-dən dəyişən icazə sisteminə çevrilə bilər.</span>
         </div>

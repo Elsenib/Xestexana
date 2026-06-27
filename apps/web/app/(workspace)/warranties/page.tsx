@@ -118,7 +118,7 @@ export default function WarrantiesPage() {
     <div>
       <section className="ws-page-head">
         <div>
-          <p className="ws-eyebrow">Klinik skelet · Zəmanət kitabçası</p>
+          <p className="ws-eyebrow">Klinik iş · Zəmanət kitabçası</p>
           <h1>Zəmanətlər</h1>
           <span>Pasiyentə verilən müalicə zəmanətləri burada izlənir. Növbəti mərhələdə PDF/çap və müalicə planına avtomatik bağlanacaq.</span>
         </div>

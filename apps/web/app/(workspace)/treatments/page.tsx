@@ -5,7 +5,7 @@ import { apiRequest, CurrentUser } from "../../../lib/lovelydent-api";
 
 type Service = { id: string; code: string; name: string; category: string; price: number; durationMinutes: number; active: boolean };
 type Patient = { id: string; fullName: string };
-type PlanItem = { id: string; tooth?: string; quantity: number; unitPrice: number; service: Service };
+type PlanItem = { id: string; tooth?: string; quantity: number; unitPrice: number; status: string; completedAt?: string | null; service: Service };
 type Plan = { id: string; title: string; status: string; patientName: string; currentVersion: number; subtotal: number; total: number; latestVersion?: { discount: number; note?: string; items: PlanItem[] } };
 type DraftItem = { serviceId: string; tooth: string; quantity: string };
 
@@ -14,7 +14,7 @@ const nextStatus: Record<string, Array<{ value: string; label: string }>> = {
   DRAFT: [{ value: "PRESENTED", label: "Pasiyentə təqdim et" }, { value: "CANCELED", label: "Ləğv et" }],
   PRESENTED: [{ value: "ACCEPTED", label: "Qəbul edildi" }, { value: "PARTIALLY_ACCEPTED", label: "Qismən qəbul" }, { value: "CANCELED", label: "Ləğv et" }],
   ACCEPTED: [{ value: "IN_PROGRESS", label: "İcraya başla" }], PARTIALLY_ACCEPTED: [{ value: "IN_PROGRESS", label: "İcraya başla" }],
-  IN_PROGRESS: [{ value: "COMPLETED", label: "Tamamla" }],
+  IN_PROGRESS: [],
 };
 
 export default function TreatmentsPage() {
@@ -56,8 +56,19 @@ export default function TreatmentsPage() {
     catch (reason) { setError(reason instanceof Error ? reason.message : "Status dəyişmədi."); }
   }
 
+  async function completeItem(itemId: string) {
+    setError(""); setNotice("");
+    try {
+      const result = await apiRequest<{ amount: number; planStatus: string }>(`/treatment-plan-items/${itemId}/complete`, { method: "POST" });
+      setNotice(`Xidmət tamamlandı və pasiyent hesabına ${result.amount.toFixed(2)} ₼ borc yazıldı.`);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Xidmət tamamlana bilmədi.");
+    }
+  }
+
   return <>
-    <section className="ws-page-head"><div><p className="ws-eyebrow">Klinik MVP · Qiymət və plan</p><h1>Müalicə planları</h1><span>Xidmətlər təsdiqli kataloqdan seçilir; qiymət plan versiyasında sabitlənir.</span></div></section>
+    <section className="ws-page-head"><div><p className="ws-eyebrow">Klinik iş axını · Qiymət və plan</p><h1>Müalicə planları</h1><span>Xidmət tamamlandıqda borc və həkim komissiyası serverdə avtomatik yaranır.</span></div></section>
     {error && <div className="ws-alert ws-alert--danger">{error}</div>}{notice && <div className="ws-alert ws-alert--success">{notice}</div>}
     <section className="ws-dashboard-grid">
       {canManageServices && <form className="ws-panel pc-form" onSubmit={createService}><header><div><p className="ws-eyebrow">Admin</p><h2>Xidmət kataloqu</h2></div></header><div className="ws-form-grid">
@@ -72,6 +83,32 @@ export default function TreatmentsPage() {
         <button type="button" className="ws-button" onClick={() => setItems([...items, { serviceId: "", tooth: "", quantity: "1" }])}>+ Xidmət sətri</button><label>Endirim (AZN)<input type="number" min="0" step="0.01" value={planForm.discount} onChange={(e) => setPlanForm({ ...planForm, discount: e.target.value })} /></label><label className="ws-form-wide">Qeyd<textarea value={planForm.note} onChange={(e) => setPlanForm({ ...planForm, note: e.target.value })} /></label><footer className="ws-form-wide"><button className="ws-button ws-button--primary" disabled={!activeServices.length}>Plan yarat</button></footer>
       </div></form>}
     </section>
-    <section className="ws-panel pc-section"><p className="ws-eyebrow">Versiyalanan tarixçə</p><h2>Planlar</h2>{plans.map((plan) => <article className="ws-flow-card" key={plan.id}><div><b>{plan.patientName} · {plan.title}</b><span>Versiya {plan.currentVersion} · {statusLabel[plan.status] ?? plan.status}</span><small>{plan.latestVersion?.items.map((item) => `${item.service.name}${item.tooth ? ` (${item.tooth})` : ""}`).join(", ")}</small></div><strong>{plan.total.toFixed(2)}₼</strong>{canAuthor && <div>{(nextStatus[plan.status] ?? []).map((action) => <button key={action.value} className="ws-row-action" onClick={() => void changeStatus(plan.id, action.value)}>{action.label}</button>)}</div>}</article>)}{!plans.length && <div className="ws-empty"><span>Hələ müalicə planı yoxdur.</span></div>}</section>
+    <section className="ws-panel pc-section">
+      <p className="ws-eyebrow">Versiyalanan tarixçə</p>
+      <h2>Planlar və icra</h2>
+      {plans.map((plan) => (
+        <article className="ws-flow-card" key={plan.id} style={{ alignItems: "flex-start" }}>
+          <div style={{ flex: 1 }}>
+            <b>{plan.patientName} · {plan.title}</b>
+            <span>Versiya {plan.currentVersion} · {statusLabel[plan.status] ?? plan.status} · {plan.total.toFixed(2)} ₼</span>
+            <div className="ws-flow-list" style={{ marginTop: 12 }}>
+              {(plan.latestVersion?.items ?? []).map((item) => (
+                <div className="ws-flow-card" key={item.id}>
+                  <div>
+                    <strong>{item.service.name}{item.tooth ? ` · diş ${item.tooth}` : ""}</strong>
+                    <span>{item.quantity} × {item.unitPrice.toFixed(2)} ₼ · {item.status === "COMPLETED" ? "Tamamlandı" : "Gözləyir"}</span>
+                  </div>
+                  {canAuthor && item.status !== "COMPLETED" && ["ACCEPTED", "PARTIALLY_ACCEPTED", "IN_PROGRESS"].includes(plan.status) ? (
+                    <button type="button" className="ws-row-action" onClick={() => void completeItem(item.id)}>Xidməti tamamla</button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+          {canAuthor ? <div>{(nextStatus[plan.status] ?? []).map((action) => <button key={action.value} className="ws-row-action" onClick={() => void changeStatus(plan.id, action.value)}>{action.label}</button>)}</div> : null}
+        </article>
+      ))}
+      {!plans.length && <div className="ws-empty"><span>Hələ müalicə planı yoxdur.</span></div>}
+    </section>
   </>;
 }

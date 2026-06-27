@@ -51,7 +51,7 @@ function FinanceWorkspace() {
   const [paymentForm, setPaymentForm] = useState({
     patientId: "",
     amount: "",
-    paymentMethod: "CASH" as "CASH" | "CARD" | "TRANSFER" | "DEPOSIT",
+    paymentMethod: "CASH" as "CASH" | "CARD" | "TRANSFER",
     description: "Klinika ödənişi",
   });
   const [chargeForm, setChargeForm] = useState({
@@ -386,11 +386,10 @@ function FinanceWorkspace() {
             </label>
             <label>
               Metod
-              <select value={paymentForm.paymentMethod} onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value as "CASH" | "CARD" | "TRANSFER" | "DEPOSIT" })}>
+              <select value={paymentForm.paymentMethod} onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value as "CASH" | "CARD" | "TRANSFER" })}>
                 <option value="CASH">Nağd</option>
                 <option value="CARD">Kart</option>
                 <option value="TRANSFER">Köçürmə</option>
-                <option value="DEPOSIT">Depozit balansından</option>
               </select>
             </label>
             <footer className="ws-form-wide">

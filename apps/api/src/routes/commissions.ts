@@ -14,14 +14,6 @@ const createRuleSchema = z.object({
   percent: z.coerce.number().min(0).max(100),
 });
 
-const manualEntrySchema = z.object({
-  doctorUserId: z.string().min(1),
-  patientId: z.string().min(1).nullable().optional(),
-  baseAmount: z.coerce.number().positive().max(999999999),
-  percent: z.coerce.number().min(0).max(100).nullable().optional(),
-  note: z.string().trim().max(600).nullable().optional(),
-});
-
 const ruleParams = z.object({ id: z.string().min(1) });
 
 async function ensureDoctor(app: FastifyInstance, clinicId: string, doctorUserId: string) {
@@ -89,17 +81,13 @@ export async function commissionRoutes(app: FastifyInstance) {
         }),
       ]);
 
-      const totalPending = entries
-        .filter((entry) => entry.status === "PENDING")
-        .reduce((sum, entry) => sum + money(entry.amount), 0);
-      const totalApproved = entries
-        .filter((entry) => entry.status === "APPROVED")
-        .reduce((sum, entry) => sum + money(entry.amount), 0);
+      const totalPotential = entries.reduce((sum, entry) => sum + money(entry.amount), 0);
+      const totalEarned = entries.reduce((sum, entry) => sum + money(entry.earnedAmount), 0);
 
       return {
         totals: {
-          pending: roundMoney(totalPending),
-          approved: roundMoney(totalApproved),
+          pending: roundMoney(totalPotential - totalEarned),
+          earned: roundMoney(totalEarned),
           entries: entries.length,
           activeRules: rules.filter((rule) => rule.active).length,
         },
@@ -124,6 +112,8 @@ export async function commissionRoutes(app: FastifyInstance) {
           baseAmount: money(entry.baseAmount),
           percent: money(entry.percent),
           amount: money(entry.amount),
+          paidBaseAmount: money(entry.paidBaseAmount),
+          earnedAmount: money(entry.earnedAmount),
           status: entry.status,
           sourceType: entry.sourceType,
           note: entry.note,
@@ -135,7 +125,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   app.post(
     "/commissions/rules",
-    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"])] },
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN"])] },
     async (request, reply) => {
       const body = createRuleSchema.parse(request.body);
 
@@ -167,7 +157,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   app.patch(
     "/commissions/rules/:id/active",
-    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"])] },
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN"])] },
     async (request, reply) => {
       const { id } = ruleParams.parse(request.params);
       const body = z.object({ active: z.boolean() }).parse(request.body);
@@ -182,48 +172,4 @@ export async function commissionRoutes(app: FastifyInstance) {
     },
   );
 
-  app.post(
-    "/commissions/entries/manual",
-    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"])] },
-    async (request, reply) => {
-      const body = manualEntrySchema.parse(request.body);
-      const doctor = await ensureDoctor(app, request.user.clinicId, body.doctorUserId);
-      if (!doctor) return reply.code(400).send({ message: "Aktiv həkim tapılmadı." });
-
-      if (body.patientId) {
-        const patient = await app.prisma.patientProfile.findFirst({
-          where: { id: body.patientId, clinicId: request.user.clinicId },
-          select: { id: true },
-        });
-        if (!patient) return reply.code(400).send({ message: "Pasiyent tapılmadı." });
-      }
-
-      const fallbackRule = await app.prisma.commissionRule.findFirst({
-        where: {
-          clinicId: request.user.clinicId,
-          active: true,
-          OR: [{ doctorUserId: body.doctorUserId }, { doctorUserId: null }],
-          serviceId: null,
-        },
-        orderBy: [{ doctorUserId: "desc" }, { updatedAt: "desc" }],
-      });
-
-      const percent = body.percent ?? money(fallbackRule?.percent);
-      const amount = roundMoney((body.baseAmount * percent) / 100);
-      const entry = await app.prisma.commissionEntry.create({
-        data: {
-          clinicId: request.user.clinicId,
-          doctorUserId: body.doctorUserId,
-          patientId: body.patientId ?? null,
-          sourceType: "MANUAL",
-          baseAmount: body.baseAmount,
-          percent,
-          amount,
-          note: body.note ?? null,
-        },
-      });
-
-      return reply.code(201).send({ id: entry.id, amount });
-    },
-  );
 }

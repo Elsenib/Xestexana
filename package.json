@@ -19,6 +19,7 @@
     "build:desktop": "npm run dist --workspace web",
     "lint": "npm run lint --workspaces --if-present",
     "test:security": "npm run build --workspace api && node --test tests/security-smoke.test.mjs",
+    "test:finance-workflow": "npm run build --workspace api && node --test tests/finance-workflow.test.mjs",
     "db:generate": "npx prisma generate",
     "db:migrate": "npx prisma migrate dev",
     "db:studio": "npx prisma studio"

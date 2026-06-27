@@ -320,8 +320,10 @@ export async function financeRoutes(app: FastifyInstance) {
           balance: result.balance,
         });
       } catch (error) {
-        if (error instanceof Error && error.message === "PATIENT_NOT_FOUND") {
-          return reply.code(404).send({ message: "Pasiyent tapılmadı." });
+        if (error instanceof Error) {
+          if (error.message === "PATIENT_NOT_FOUND") {
+            return reply.code(404).send({ message: "Pasiyent tapılmadı." });
+          }
         }
         throw error;
       }
@@ -421,8 +423,13 @@ export async function financeRoutes(app: FastifyInstance) {
           balance: result.balance,
         });
       } catch (error) {
-        if (error instanceof Error && error.message === "PATIENT_NOT_FOUND") {
-          return reply.code(404).send({ message: "Pasiyent tapılmadı." });
+        if (error instanceof Error) {
+          if (error.message === "PATIENT_NOT_FOUND") {
+            return reply.code(404).send({ message: "Pasiyent tapılmadı." });
+          }
+          if (error.message === "PAYMENT_EXCEEDS_BALANCE") {
+            return reply.code(409).send({ message: "Ödəniş açıq borcdan çox ola bilməz. Artıq məbləği depozit kimi qəbul edin." });
+          }
         }
         throw error;
       }
