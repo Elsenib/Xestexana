@@ -12,12 +12,17 @@ import {
   recordAudit,
 } from "../services/audit-service.js";
 import { normalizePhone } from "../services/phone-utils.js";
+import {
+  patientAdministrativeFields,
+  patientAdministrativeWriteData,
+  validatePatientAdministrativeFields,
+} from "../services/patient-administrative-fields.js";
 
 const registerPatientWithClinicSchema = z.object({
   clinicId: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
-  identityNumber: z.string().min(5),
+  identityNumber: z.string().trim().min(3).max(80),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   phone: z.string().min(5),
@@ -25,8 +30,9 @@ const registerPatientWithClinicSchema = z.object({
   birthDate: z.string().datetime(),
   bloodType: z.string().optional(),
   allergies: z.string().optional(),
-  chronicConditions: z.string().optional()
-});
+  chronicConditions: z.string().optional(),
+  ...patientAdministrativeFields,
+}).superRefine(validatePatientAdministrativeFields);
 
 const bootstrapSchema = z.object({
   setupKey: z.string().min(8),
@@ -90,7 +96,8 @@ export async function authRoutes(app: FastifyInstance) {
           firstName: body.firstName,
           lastName: body.lastName,
           phone: body.phone,
-          phoneNormalized: normalizePhone(body.phone),
+          phoneNormalized: normalizePhone(body.phone, body.patientType === "FOREIGN" ? null : "994"),
+          ...patientAdministrativeWriteData(body),
           gender: body.gender,
           birthDate: new Date(body.birthDate),
           bloodType: body.bloodType,

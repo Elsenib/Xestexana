@@ -36,6 +36,12 @@ type Summary = {
   lastName: string;
   identityNumber: string;
   phone: string;
+  patientType: "LOCAL" | "FOREIGN";
+  citizenshipCountryCode: string;
+  identityDocumentType: "NATIONAL_ID" | "PASSPORT" | "RESIDENCE_PERMIT" | "OTHER";
+  identityDocumentExpiry?: string | null;
+  preferredLanguage: "AZ" | "TR" | "RU" | "EN" | "OTHER";
+  interpreterRequired: boolean;
   gender: string;
   birthDate: string;
   bloodType?: string;
@@ -555,7 +561,9 @@ function ClinicalCard() {
             {data.lastName[0]}
           </i>
           <div>
-            <p className="ws-eyebrow">Pasiyent #{data.identityNumber}</p>
+            <p className="ws-eyebrow">
+              {data.patientType === "FOREIGN" ? `Xarici pasiyent · ${data.citizenshipCountryCode}` : "Yerli pasiyent"} · #{data.identityNumber}
+            </p>
             <h1>
               {data.firstName} {data.lastName}
             </h1>
@@ -600,6 +608,30 @@ function ClinicalCard() {
       {notice && <div className="ws-alert ws-alert--success">{notice}</div>}
       {tab === "summary" && (
         <section className="pc-grid">
+          {data.patientType === "FOREIGN" && (
+            <article className="ws-panel pc-section">
+              <p className="ws-eyebrow">Xarici vətəndaş məlumatı</p>
+              <h2>Sənəd və ünsiyyət</h2>
+              <dl>
+                <div>
+                  <dt>Vətəndaşlıq</dt>
+                  <dd>{data.citizenshipCountryCode}</dd>
+                </div>
+                <div>
+                  <dt>Sənəd</dt>
+                  <dd>{data.identityDocumentType} · {data.identityNumber}</dd>
+                </div>
+                <div>
+                  <dt>Sənədin bitmə tarixi</dt>
+                  <dd>{data.identityDocumentExpiry ? new Date(data.identityDocumentExpiry).toLocaleDateString("az-AZ") : "Qeyd edilməyib"}</dd>
+                </div>
+                <div>
+                  <dt>Ünsiyyət dili</dt>
+                  <dd>{data.preferredLanguage} · {data.interpreterRequired ? "Tərcüməçi tələb olunur" : "Tərcüməçi tələb olunmur"}</dd>
+                </div>
+              </dl>
+            </article>
+          )}
           <article className="ws-panel pc-section">
             <p className="ws-eyebrow">Tibbi təhlükəsizlik</p>
             <h2>Anamnez xülasəsi</h2>

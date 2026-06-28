@@ -132,7 +132,9 @@ export async function clinicalCoreRoutes(app: FastifyInstance) {
     const patient = await app.prisma.patientProfile.findFirst({
       where: { id, clinicId: request.user.clinicId },
       select: {
-        id: true, firstName: true, lastName: true, identityNumber: true, phone: true, gender: true, birthDate: true, bloodType: true,
+        id: true, firstName: true, lastName: true, identityNumber: true, phone: true, patientType: true,
+        citizenshipCountryCode: true, identityDocumentType: true, identityDocumentExpiry: true,
+        preferredLanguage: true, interpreterRequired: true, gender: true, birthDate: true, bloodType: true,
         anamnesisVersions: { orderBy: { version: "desc" }, take: 10 },
         odontogramSnapshots: { orderBy: { createdAt: "desc" }, take: 20 },
         clinicalEncounters: { orderBy: { createdAt: "desc" }, take: 30, include: { doctor: { select: { email: true } }, revisions: { orderBy: { revision: "desc" } } } }

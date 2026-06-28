@@ -144,38 +144,45 @@ model Task {
 }
 
 model PatientProfile {
-  id                   String                    @id @default(cuid())
-  userId               String                    @unique
-  clinicId             String
-  identityNumber       String
-  firstName            String
-  lastName             String
-  phone                String
-  phoneNormalized      String?
-  gender               String
-  birthDate            DateTime
-  bloodType            String?
-  allergies            String?
-  chronicConditions    String?
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
-  clinic               Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  appointments         Appointment[]
-  medicalRecords       MedicalRecord[]
-  anamnesisVersions    PatientAnamnesisVersion[]
-  odontogramSnapshots  OdontogramSnapshot[]
-  clinicalEncounters   ClinicalEncounter[]
-  treatmentPlans       TreatmentPlan[]
-  accountEntries       PatientAccountEntry[]
-  files                PatientFile[]
-  commissionEntries    CommissionEntry[]
-  warranties           PatientWarranty[]
-  whatsappConversation WhatsAppConversation?
+  id                     String                    @id @default(cuid())
+  userId                 String                    @unique
+  clinicId               String
+  identityNumber         String
+  firstName              String
+  lastName               String
+  phone                  String
+  phoneNormalized        String?
+  patientType            String                    @default("LOCAL")
+  citizenshipCountryCode String                    @default("AZ")
+  identityDocumentType   String                    @default("NATIONAL_ID")
+  identityDocumentExpiry DateTime?
+  preferredLanguage      String                    @default("AZ")
+  interpreterRequired    Boolean                   @default(false)
+  gender                 String
+  birthDate              DateTime
+  bloodType              String?
+  allergies              String?
+  chronicConditions      String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  clinic                 Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user                   User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments           Appointment[]
+  medicalRecords         MedicalRecord[]
+  anamnesisVersions      PatientAnamnesisVersion[]
+  odontogramSnapshots    OdontogramSnapshot[]
+  clinicalEncounters     ClinicalEncounter[]
+  treatmentPlans         TreatmentPlan[]
+  accountEntries         PatientAccountEntry[]
+  files                  PatientFile[]
+  commissionEntries      CommissionEntry[]
+  warranties             PatientWarranty[]
+  whatsappConversation   WhatsAppConversation?
 
-  @@unique([clinicId, identityNumber])
+  @@unique([clinicId, citizenshipCountryCode, identityDocumentType, identityNumber])
   @@index([clinicId, lastName, firstName])
   @@index([clinicId, phoneNormalized])
+  @@index([clinicId, patientType, citizenshipCountryCode])
 }
 
 model DoctorProfile {

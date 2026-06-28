@@ -9,16 +9,44 @@ type Patient = {
   email: string;
   identityNumber: string;
   phone: string;
+  patientType: "LOCAL" | "FOREIGN";
+  citizenshipCountryCode: string;
+  identityDocumentType: "NATIONAL_ID" | "PASSPORT" | "RESIDENCE_PERMIT" | "OTHER";
+  identityDocumentExpiry?: string | null;
+  preferredLanguage: "AZ" | "TR" | "RU" | "EN" | "OTHER";
+  interpreterRequired: boolean;
   birthDate: string;
   createdAt: string;
 };
-const initial = {
+type PatientForm = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  identityNumber: string;
+  phone: string;
+  patientType: "LOCAL" | "FOREIGN";
+  citizenshipCountryCode: string;
+  identityDocumentType: "NATIONAL_ID" | "PASSPORT" | "RESIDENCE_PERMIT" | "OTHER";
+  identityDocumentExpiry: string;
+  preferredLanguage: "AZ" | "TR" | "RU" | "EN" | "OTHER";
+  interpreterRequired: boolean;
+  gender: string;
+  birthDate: string;
+};
+const initial: PatientForm = {
   firstName: "",
   lastName: "",
   email: "",
   password: "",
   identityNumber: "",
   phone: "",
+  patientType: "LOCAL",
+  citizenshipCountryCode: "AZ",
+  identityDocumentType: "NATIONAL_ID",
+  identityDocumentExpiry: "",
+  preferredLanguage: "AZ",
+  interpreterRequired: false,
   gender: "FEMALE",
   birthDate: "1990-01-01",
 };
@@ -26,6 +54,7 @@ const initial = {
 export default function PatientsPage() {
   const [rows, setRows] = useState<Patient[]>([]);
   const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"ALL" | "LOCAL" | "FOREIGN">("ALL");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [drawer, setDrawer] = useState(false);
@@ -33,7 +62,8 @@ export default function PatientsPage() {
   async function load() {
     setLoading(true);
     try {
-      setRows(await apiRequest<Patient[]>("/patients?take=200"));
+      const patientTypeQuery = typeFilter === "ALL" ? "" : `&patientType=${typeFilter}`;
+      setRows(await apiRequest<Patient[]>(`/patients?take=200${patientTypeQuery}`));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pasiyentlər yüklənmədi.");
     } finally {
@@ -42,17 +72,18 @@ export default function PatientsPage() {
   }
   useEffect(() => {
     void load();
-  }, []);
+  }, [typeFilter]);
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("az");
-    return q
-      ? rows.filter((p) =>
-          `${p.fullName} ${p.phone} ${p.identityNumber}`
+    return rows.filter((p) => {
+      const matchesType = typeFilter === "ALL" || p.patientType === typeFilter;
+      const matchesQuery = !q ||
+          `${p.fullName} ${p.phone} ${p.identityNumber} ${p.citizenshipCountryCode}`
             .toLocaleLowerCase("az")
-            .includes(q),
-        )
-      : rows;
-  }, [query, rows]);
+            .includes(q);
+      return matchesType && matchesQuery;
+    });
+  }, [query, rows, typeFilter]);
   async function create(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -62,6 +93,9 @@ export default function PatientsPage() {
         body: JSON.stringify({
           ...form,
           birthDate: new Date(form.birthDate).toISOString(),
+          identityDocumentExpiry: form.identityDocumentExpiry
+            ? new Date(form.identityDocumentExpiry).toISOString()
+            : null,
         }),
       });
       setDrawer(false);
@@ -72,9 +106,9 @@ export default function PatientsPage() {
     }
   }
   const field =
-    (key: keyof typeof initial) =>
+    (key: keyof PatientForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm({ ...form, [key]: e.target.value });
+      setForm({ ...form, [key]: e.target.value } as PatientForm);
 
   return (
     <>
@@ -103,6 +137,16 @@ export default function PatientsPage() {
               placeholder="Ad, telefon və ya FIN ilə axtar"
             />
           </label>
+          <select
+            className="ws-filter-select"
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}
+            aria-label="Pasiyent tipinə görə süzgəc"
+          >
+            <option value="ALL">Bütün pasiyentlər</option>
+            <option value="LOCAL">Yerli vətəndaşlar</option>
+            <option value="FOREIGN">Xarici vətəndaşlar</option>
+          </select>
           <span>{filtered.length} pasiyent</span>
         </header>
         {error && <div className="ws-alert ws-alert--danger">{error}</div>}
@@ -112,7 +156,7 @@ export default function PatientsPage() {
               <tr>
                 <th>Pasiyent</th>
                 <th>Əlaqə</th>
-                <th>FIN</th>
+                <th>Tip / sənəd</th>
                 <th>Doğum tarixi</th>
                 <th>Qeydiyyat</th>
                 <th />
@@ -139,7 +183,12 @@ export default function PatientsPage() {
                     </td>
                     <td>{p.phone}</td>
                     <td>
-                      <code>{p.identityNumber}</code>
+                      <span className={`ws-patient-kind ${p.patientType === "FOREIGN" ? "is-foreign" : ""}`}>
+                        {p.patientType === "FOREIGN" ? `Xarici · ${p.citizenshipCountryCode}` : "Yerli"}
+                      </span>
+                      <small className="ws-document-line">
+                        {p.identityDocumentType === "PASSPORT" ? "Pasport" : p.identityDocumentType === "RESIDENCE_PERMIT" ? "Yaşayış icazəsi" : "Şəxsiyyət sənədi"}: <code>{p.identityNumber}</code>
+                      </small>
                     </td>
                     <td>{new Date(p.birthDate).toLocaleDateString("az-AZ")}</td>
                     <td>{new Date(p.createdAt).toLocaleDateString("az-AZ")}</td>
@@ -183,6 +232,27 @@ export default function PatientsPage() {
               <button onClick={() => setDrawer(false)}>×</button>
             </header>
             <form onSubmit={create} className="ws-form-grid">
+              <label className="ws-form-wide">
+                Pasiyent tipi
+                <select
+                  value={form.patientType}
+                  onChange={(event) => {
+                    const patientType = event.target.value as "LOCAL" | "FOREIGN";
+                    setForm({
+                      ...form,
+                      patientType,
+                      citizenshipCountryCode: patientType === "LOCAL" ? "AZ" : "",
+                      identityDocumentType: patientType === "LOCAL" ? "NATIONAL_ID" : "PASSPORT",
+                      preferredLanguage: patientType === "LOCAL" ? "AZ" : "EN",
+                      identityDocumentExpiry: "",
+                      interpreterRequired: false,
+                    });
+                  }}
+                >
+                  <option value="LOCAL">Azərbaycan vətəndaşı</option>
+                  <option value="FOREIGN">Xarici vətəndaş</option>
+                </select>
+              </label>
               <label>
                 Ad
                 <input
@@ -200,17 +270,85 @@ export default function PatientsPage() {
                 />
               </label>
               <label>
-                Telefon
-                <input value={form.phone} onChange={field("phone")} required />
+                Telefon {form.patientType === "FOREIGN" ? "(ölkə kodu ilə)" : ""}
+                <input
+                  value={form.phone}
+                  onChange={field("phone")}
+                  placeholder={form.patientType === "FOREIGN" ? "+90 5xx xxx xx xx" : "+994 50 000 00 00"}
+                  required
+                />
               </label>
               <label>
-                FIN
+                {form.patientType === "FOREIGN" ? "Sənəd nömrəsi" : "FIN"}
                 <input
                   value={form.identityNumber}
                   onChange={field("identityNumber")}
                   required
                 />
               </label>
+              {form.patientType === "FOREIGN" && (
+                <>
+                  <label>
+                    Vətəndaşlıq ölkəsi (ISO kodu)
+                    <input
+                      list="citizenship-country-codes"
+                      maxLength={2}
+                      pattern="[A-Za-z]{2}"
+                      value={form.citizenshipCountryCode}
+                      onChange={field("citizenshipCountryCode")}
+                      placeholder="TR"
+                      required
+                    />
+                    <datalist id="citizenship-country-codes">
+                      <option value="TR">Türkiyə</option>
+                      <option value="RU">Rusiya</option>
+                      <option value="GE">Gürcüstan</option>
+                      <option value="IR">İran</option>
+                      <option value="KZ">Qazaxıstan</option>
+                      <option value="UA">Ukrayna</option>
+                      <option value="AE">BƏƏ</option>
+                      <option value="US">ABŞ</option>
+                      <option value="GB">Birləşmiş Krallıq</option>
+                    </datalist>
+                  </label>
+                  <label>
+                    Şəxsiyyət sənədi
+                    <select value={form.identityDocumentType} onChange={field("identityDocumentType")}>
+                      <option value="PASSPORT">Pasport</option>
+                      <option value="NATIONAL_ID">Xarici şəxsiyyət vəsiqəsi</option>
+                      <option value="RESIDENCE_PERMIT">Yaşayış icazəsi</option>
+                      <option value="OTHER">Digər sənəd</option>
+                    </select>
+                  </label>
+                  <label>
+                    Sənədin bitmə tarixi
+                    <input
+                      type="date"
+                      value={form.identityDocumentExpiry}
+                      onChange={field("identityDocumentExpiry")}
+                      required={form.identityDocumentType === "PASSPORT"}
+                    />
+                  </label>
+                  <label>
+                    Ünsiyyət dili
+                    <select value={form.preferredLanguage} onChange={field("preferredLanguage")}>
+                      <option value="AZ">Azərbaycan dili</option>
+                      <option value="TR">Türk dili</option>
+                      <option value="RU">Rus dili</option>
+                      <option value="EN">İngilis dili</option>
+                      <option value="OTHER">Digər</option>
+                    </select>
+                  </label>
+                  <label className="ws-checkbox ws-form-wide">
+                    <input
+                      type="checkbox"
+                      checked={form.interpreterRequired}
+                      onChange={(event) => setForm({ ...form, interpreterRequired: event.target.checked })}
+                    />
+                    <span>Tərcüməçi tələb olunur</span>
+                  </label>
+                </>
+              )}
               <label>
                 E-poçt
                 <input

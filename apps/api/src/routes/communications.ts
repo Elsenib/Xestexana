@@ -58,10 +58,10 @@ export async function communicationRoutes(app: FastifyInstance) {
       const body = openSchema.parse(request.body);
       const patient = await app.prisma.patientProfile.findFirst({
         where: { id: body.patientId, clinicId: request.user.clinicId },
-        select: { id: true, phone: true },
+        select: { id: true, phone: true, patientType: true },
       });
       if (!patient) return reply.code(404).send({ message: "Pasiyent tapılmadı." });
-      const phone = normalizePhone(patient.phone);
+      const phone = normalizePhone(patient.phone, patient.patientType === "FOREIGN" ? null : "994");
       if (phone.length < 10) return reply.code(400).send({ message: "Pasiyentin WhatsApp nömrəsi düzgün deyil." });
       const now = new Date();
       const conversation = await app.prisma.$transaction(async (tx) => {

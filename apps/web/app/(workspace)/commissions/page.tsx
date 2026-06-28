@@ -174,9 +174,9 @@ export default function CommissionsPage() {
       <section className="ws-page-head">
         <div>
           <p className="ws-eyebrow">Avtomatik maliyyə · Gəlir bölgüsü</p>
-          <h1>Həkim–klinika gəlir bölgüsü</h1>
+          <h1>Həkim faiz hesablaşmaları</h1>
           <span>
-            Həkim maaş almır: görülən xidmətin ödənmiş hissəsi qaydaya əsasən həkim və klinika arasında bölünür. Məsələn 50% / 50%.
+            Bu modul faizlə işləyən həkimlər üçündür. Faiz qaydası təyin edilməyən həkimə avtomatik pay hesablanmır; maaşlı və hibrid müqavilələr ayrıca əməkhaqqı qaydası ilə idarə ediləcək.
           </span>
         </div>
       </section>

@@ -2,6 +2,11 @@ import bcrypt from "bcryptjs";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { normalizePhone } from "../services/phone-utils.js";
+import {
+  patientAdministrativeFields,
+  patientAdministrativeWriteData,
+  validatePatientAdministrativeFields,
+} from "../services/patient-administrative-fields.js";
 
 function mapAppointment(row: {
   id: string;
@@ -56,7 +61,7 @@ function mapMedicalRecord(row: {
 const createPatientSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  identityNumber: z.string().min(5),
+  identityNumber: z.string().trim().min(3).max(80),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   phone: z.string().min(5),
@@ -64,11 +69,13 @@ const createPatientSchema = z.object({
   birthDate: z.string().datetime(),
   bloodType: z.string().optional(),
   allergies: z.string().optional(),
-  chronicConditions: z.string().optional()
-});
+  chronicConditions: z.string().optional(),
+  ...patientAdministrativeFields,
+}).superRefine(validatePatientAdministrativeFields);
 
 const listQuerySchema = z.object({
   q: z.string().optional(),
+  patientType: z.enum(["LOCAL", "FOREIGN"]).optional(),
   take: z.coerce.number().int().min(1).max(200).default(50)
 });
 
@@ -124,6 +131,12 @@ export async function patientRoutes(app: FastifyInstance) {
         fullName: `${profile.firstName} ${profile.lastName}`,
         identityNumber: profile.identityNumber,
         phone: profile.phone,
+        patientType: profile.patientType,
+        citizenshipCountryCode: profile.citizenshipCountryCode,
+        identityDocumentType: profile.identityDocumentType,
+        identityDocumentExpiry: profile.identityDocumentExpiry?.toISOString() ?? null,
+        preferredLanguage: profile.preferredLanguage,
+        interpreterRequired: profile.interpreterRequired,
         gender: profile.gender,
         birthDate: profile.birthDate.toISOString(),
         bloodType: profile.bloodType,
@@ -148,12 +161,15 @@ export async function patientRoutes(app: FastifyInstance) {
       const rows = (await app.prisma.patientProfile.findMany({
         where: {
           clinicId, // ✅ yalnız öz klinikasının xəstələri
+          ...(query.patientType ? { patientType: query.patientType } : {}),
           ...(query.q
             ? {
                 OR: [
                   { firstName: { contains: query.q } },
                   { lastName: { contains: query.q } },
-                  { identityNumber: { contains: query.q } }
+                  { identityNumber: { contains: query.q } },
+                  { phone: { contains: query.q } },
+                  { citizenshipCountryCode: { contains: query.q.toUpperCase() } }
                 ]
               }
             : {})
@@ -169,6 +185,12 @@ export async function patientRoutes(app: FastifyInstance) {
         firstName: string;
         lastName: string;
         phone: string;
+        patientType: string;
+        citizenshipCountryCode: string;
+        identityDocumentType: string;
+        identityDocumentExpiry: Date | null;
+        preferredLanguage: string;
+        interpreterRequired: boolean;
         gender: string;
         birthDate: Date;
         createdAt: Date;
@@ -183,6 +205,12 @@ export async function patientRoutes(app: FastifyInstance) {
         firstName: row.firstName,
         lastName: row.lastName,
         phone: row.phone,
+        patientType: row.patientType,
+        citizenshipCountryCode: row.citizenshipCountryCode,
+        identityDocumentType: row.identityDocumentType,
+        identityDocumentExpiry: row.identityDocumentExpiry,
+        preferredLanguage: row.preferredLanguage,
+        interpreterRequired: row.interpreterRequired,
         gender: row.gender,
         birthDate: row.birthDate,
         createdAt: row.createdAt
@@ -218,7 +246,8 @@ export async function patientRoutes(app: FastifyInstance) {
             firstName: body.firstName,
             lastName: body.lastName,
             phone: body.phone,
-            phoneNormalized: normalizePhone(body.phone),
+            phoneNormalized: normalizePhone(body.phone, body.patientType === "FOREIGN" ? null : "994"),
+            ...patientAdministrativeWriteData(body),
             gender: body.gender,
             birthDate: new Date(body.birthDate),
             bloodType: body.bloodType,
@@ -282,6 +311,12 @@ export async function patientRoutes(app: FastifyInstance) {
         fullName: `${profile.firstName} ${profile.lastName}`,
         identityNumber: profile.identityNumber,
         phone: profile.phone,
+        patientType: profile.patientType,
+        citizenshipCountryCode: profile.citizenshipCountryCode,
+        identityDocumentType: profile.identityDocumentType,
+        identityDocumentExpiry: profile.identityDocumentExpiry?.toISOString() ?? null,
+        preferredLanguage: profile.preferredLanguage,
+        interpreterRequired: profile.interpreterRequired,
         gender: profile.gender,
         birthDate: profile.birthDate.toISOString(),
         bloodType: profile.bloodType,

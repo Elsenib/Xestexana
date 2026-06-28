@@ -200,6 +200,12 @@
   background: #f5faf8;
   transform: none;
 }
+.ws-nav-group-menu a.active:hover,
+.ws-nav-group-menu a.active:focus-visible {
+  background: linear-gradient(180deg, #128579 0%, #0d665c 100%);
+  border-color: var(--ws-teal);
+  color: #fff;
+}
 .ws-data-table {
   width: 100%;
   min-width: 860px;
@@ -273,6 +279,55 @@
   color: var(--ws-muted);
   font-size: 11px;
   font-weight: 600;
+}
+.ws-patient-kind {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #d7e2de;
+  background: #f4f8f6;
+  color: #53615d;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ws-patient-kind.is-foreign {
+  border-color: #d9c89f;
+  background: #fff8e8;
+  color: #765b1c;
+}
+.ws-document-line {
+  display: block;
+  margin-top: 7px;
+  color: var(--ws-muted);
+}
+.ws-checkbox {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--ws-line);
+  border-radius: 12px;
+  background: #f8fbfa;
+}
+.ws-checkbox input {
+  width: 18px !important;
+  height: 18px;
+  margin: 0;
+}
+.ws-filter-select {
+  min-height: 40px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--ws-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ws-ink);
+  font: inherit;
 }
 .ws-user-chip {
   display: flex;

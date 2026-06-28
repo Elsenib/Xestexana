@@ -20,6 +20,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "test:security": "npm run build --workspace api && node --test tests/security-smoke.test.mjs",
     "test:finance-workflow": "npm run build --workspace api && node --test tests/finance-workflow.test.mjs",
+    "test:patient-administrative": "npm run build --workspace api && node --test tests/patient-administrative.test.mjs",
     "db:generate": "npx prisma generate",
     "db:migrate": "npx prisma migrate dev",
     "db:studio": "npx prisma studio"
