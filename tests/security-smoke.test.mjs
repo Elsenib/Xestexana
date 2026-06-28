@@ -91,6 +91,32 @@ test("WhatsApp webhook rejects forged payloads and accepts a valid signature", a
   assert.equal(rejected.statusCode, 401);
 });
 
+test("invalid foreign patient data returns a validation response instead of 500", async () => {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/auth/register-patient",
+    payload: {
+      clinicId: "validation-check",
+      email: "validation-check@example.invalid",
+      password: "ValidationCheck123!",
+      identityNumber: "P123456",
+      firstName: "Validation",
+      lastName: "Check",
+      phone: "0501112233",
+      gender: "OTHER",
+      birthDate: "1990-01-01T00:00:00.000Z",
+      patientType: "FOREIGN",
+      citizenshipCountryCode: "AZ",
+      identityDocumentType: "PASSPORT"
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  const body = response.json();
+  assert.equal(body.field, "citizenshipCountryCode");
+  assert.ok(body.issues.some((issue) => issue.field === "phone"));
+});
+
 test("observability endpoints require authentication", async () => {
   const response = await app.inject({
     method: "GET",

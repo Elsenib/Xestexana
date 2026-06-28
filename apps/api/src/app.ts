@@ -98,6 +98,31 @@ export function buildApp() {
     });
   });
 
+  app.setErrorHandler((error, request, reply) => {
+    if (error instanceof ZodError) {
+      const firstIssue = error.issues[0];
+      return reply.code(400).send({
+        message: firstIssue?.message ?? "Daxil edilən məlumatlar düzgün deyil.",
+        field: firstIssue?.path.join(".") || null,
+        issues: error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      });
+    }
+
+    const appError = error as { code?: string; statusCode?: number; message?: string };
+    if (appError.code === "P2002") {
+      return reply.code(409).send({ message: "Bu məlumatla qeyd artıq mövcuddur." });
+    }
+
+    const statusCode = typeof appError.statusCode === "number" ? appError.statusCode : 500;
+    if (statusCode >= 500) request.log.error(error);
+    return reply.code(statusCode).send({
+      message: statusCode >= 500 ? "Daxili server xətası baş verdi." : (appError.message ?? "Sorğu tamamlanmadı."),
+    });
+  });
+
   app.register(fastifyJwt, {
     secret: env.JWT_SECRET
   });
