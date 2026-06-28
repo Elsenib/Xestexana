@@ -1,5 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { closeCommissionPeriod, recordCommissionPayout } from "../services/commission-service.js";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+  actorFromRequest,
+  auditRequestMeta,
+  recordAudit,
+} from "../services/audit-service.js";
 
 const commissionRoles = ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT", "MANAGEMENT"] as const;
 
@@ -15,6 +23,18 @@ const createRuleSchema = z.object({
 });
 
 const ruleParams = z.object({ id: z.string().min(1) });
+const dateField = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const closePeriodSchema = z.object({
+  startDate: dateField,
+  endDate: dateField,
+  note: z.string().trim().max(500).nullable().optional(),
+});
+const payoutSchema = z.object({
+  amount: z.coerce.number().positive().max(999999999),
+  paymentMethod: z.enum(["CASH", "CARD", "TRANSFER"]),
+  reference: z.string().trim().max(120).nullable().optional(),
+  note: z.string().trim().max(500).nullable().optional(),
+});
 
 async function ensureDoctor(app: FastifyInstance, clinicId: string, doctorUserId: string) {
   return app.prisma.user.findFirst({
@@ -169,6 +189,138 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       await app.prisma.commissionRule.update({ where: { id }, data: { active: body.active } });
       return { id, active: body.active };
+    },
+  );
+
+  app.get(
+    "/commissions/periods",
+    { preHandler: [app.authenticate, app.authorize([...commissionRoles])] },
+    async (request) => {
+      const periods = await app.prisma.commissionPeriod.findMany({
+        where: { clinicId: request.user.clinicId },
+        orderBy: { endDate: "desc" },
+        take: 36,
+        include: {
+          closedBy: { select: { email: true } },
+          settlements: {
+            orderBy: { earnedAmount: "desc" },
+            include: {
+              doctor: { select: { email: true, doctorProfile: true } },
+              payouts: { orderBy: { paidAt: "desc" } },
+            },
+          },
+        },
+      });
+      return periods.map((period) => ({
+        id: period.id,
+        startDate: period.startDate.toISOString(),
+        endDate: period.endDate.toISOString(),
+        totalAmount: money(period.totalAmount),
+        status: period.status,
+        note: period.note,
+        closedAt: period.closedAt.toISOString(),
+        closedBy: period.closedBy.email,
+        settlements: period.settlements.map((settlement) => ({
+          id: settlement.id,
+          doctorName: settlement.doctor.doctorProfile
+            ? `${settlement.doctor.doctorProfile.title} ${settlement.doctor.doctorProfile.firstName} ${settlement.doctor.doctorProfile.lastName}`
+            : settlement.doctor.email,
+          earnedAmount: money(settlement.earnedAmount),
+          paidAmount: money(settlement.paidAmount),
+          status: settlement.status,
+          payouts: settlement.payouts.map((payout) => ({
+            id: payout.id,
+            amount: money(payout.amount),
+            paymentMethod: payout.paymentMethod,
+            reference: payout.reference,
+            note: payout.note,
+            paidAt: payout.paidAt.toISOString(),
+          })),
+        })),
+      }));
+    },
+  );
+
+  app.post(
+    "/commissions/periods/close",
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN"])] },
+    async (request, reply) => {
+      const body = closePeriodSchema.parse(request.body);
+      try {
+        const period = await app.prisma.$transaction((tx) =>
+          closeCommissionPeriod(tx, {
+            clinicId: request.user.clinicId,
+            startDate: new Date(`${body.startDate}T00:00:00.000Z`),
+            endDate: new Date(`${body.endDate}T00:00:00.000Z`),
+            closedByUserId: request.user.sub!,
+            note: body.note ?? null,
+          }),
+        );
+        await recordAudit(app.prisma, {
+          ...actorFromRequest(request),
+          ...auditRequestMeta(request),
+          category: AUDIT_CATEGORIES.FINANCE,
+          action: AUDIT_ACTIONS.COMMISSION_PERIOD_CLOSED,
+          entityType: "CommissionPeriod",
+          entityId: period.id,
+          summary: `Komissiya periodu bağlandı · ${period.totalAmount.toNumber().toFixed(2)} ₼`,
+          details: { startDate: body.startDate, endDate: body.endDate, settlements: period.settlements.length },
+        });
+        return reply.code(201).send({ id: period.id, totalAmount: period.totalAmount.toNumber() });
+      } catch (error) {
+        if (error instanceof Error) {
+          const messages: Record<string, string> = {
+            INVALID_PERIOD: "Periodun tarix aralığı düzgün deyil.",
+            FUTURE_PERIOD: "Gələcək period bağlana bilməz.",
+            PERIOD_OVERLAP: "Bu tarix aralığı əvvəl bağlanmış komissiya periodu ilə kəsişir.",
+          };
+          if (messages[error.message]) return reply.code(409).send({ message: messages[error.message] });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    "/commissions/settlements/:id/payout",
+    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN"])] },
+    async (request, reply) => {
+      const { id } = ruleParams.parse(request.params);
+      const body = payoutSchema.parse(request.body);
+      try {
+        const payout = await app.prisma.$transaction((tx) =>
+          recordCommissionPayout(tx, {
+            clinicId: request.user.clinicId,
+            settlementId: id,
+            amount: body.amount,
+            paymentMethod: body.paymentMethod,
+            reference: body.reference ?? null,
+            note: body.note ?? null,
+            paidByUserId: request.user.sub!,
+          }),
+        );
+        await recordAudit(app.prisma, {
+          ...actorFromRequest(request),
+          ...auditRequestMeta(request),
+          category: AUDIT_CATEGORIES.FINANCE,
+          action: AUDIT_ACTIONS.COMMISSION_PAYOUT_RECORDED,
+          entityType: "CommissionPayout",
+          entityId: payout.id,
+          summary: `Həkim komissiyası ödənildi · ${payout.amount.toNumber().toFixed(2)} ₼`,
+          details: { settlementId: id, paymentMethod: body.paymentMethod },
+        });
+        return reply.code(201).send({ id: payout.id });
+      } catch (error) {
+        if (error instanceof Error) {
+          const messages: Record<string, string> = {
+            SETTLEMENT_NOT_FOUND: "Həkim hesablaşması tapılmadı.",
+            PAYOUT_EXCEEDS_BALANCE: "Ödəniş məbləği qalan komissiyadan çoxdur.",
+            CASH_SESSION_REQUIRED: "Nağd komissiya ödənişi üçün kassa növbəsi açılmalıdır.",
+          };
+          if (messages[error.message]) return reply.code(409).send({ message: messages[error.message] });
+        }
+        throw error;
+      }
     },
   );
 

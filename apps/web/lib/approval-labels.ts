@@ -2,6 +2,7 @@ export const approvalActionLabels: Record<string, string> = {
   STOCK_MOVEMENT: "Stok hərəkəti",
   CLINICAL_ENCOUNTER_COMPLETE: "Klinik qəbulun tamamlanması",
   SERVICE_UPSERT: "Xidmət kataloqu dəyişikliyi",
+  FINANCE_REFUND: "Ödəniş refund sorğusu",
 };
 
 export const stockMovementLabels: Record<string, string> = {
@@ -21,6 +22,8 @@ export const roleLabels: Record<string, string> = {
   DOCTOR: "Həkim",
   NURSE: "Assistent",
   INVENTORY_MANAGER: "Anbar məsulu",
+  CASHIER: "Kassir",
+  ACCOUNTANT: "Mühasib",
 };
 
 export type ApprovalRow = {
@@ -52,6 +55,11 @@ export function describeApproval(row: ApprovalRow, productName?: string) {
     const mode = row.payload.mode === "create" ? "Yeni xidmət" : "Xidmət yenilənməsi";
     const data = row.payload.data as { name?: string; code?: string } | undefined;
     return `${mode}${data?.name ? ` · ${data.name}` : ""}${data?.code ? ` (${data.code})` : ""}`;
+  }
+  if (row.actionType === "FINANCE_REFUND") {
+    const amount = Number(row.payload.amount ?? 0).toFixed(2);
+    const description = String(row.payload.description ?? "Refund");
+    return `${description} · ${amount} ₼ · qəbz ${String(row.payload.referencePaymentId ?? "—")}`;
   }
   return row.actionType;
 }

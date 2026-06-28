@@ -11,7 +11,9 @@ const {
   createChargeCommission,
   recordCharge,
   recordPayment,
+  recordRefund,
 } = await import("../apps/api/dist/services/finance-service.js");
+const { closeCommissionPeriod, recordCommissionPayout } = await import("../apps/api/dist/services/commission-service.js");
 
 const prisma = new PrismaClient();
 const rollback = new Error("ROLLBACK_FINANCE_WORKFLOW_TEST");
@@ -108,7 +110,7 @@ test("service charge, partial payment and doctor commission stay in sync", async
       assert.equal(partial.earnedAmount.toNumber(), 4);
       assert.equal(await computePatientBalance(tx, clinic.id, patient.id), 60);
 
-      await recordPayment(tx, {
+      const finalPayment = await recordPayment(tx, {
         clinicId: clinic.id,
         patientId: patient.id,
         createdByUserId: doctor.id,
@@ -125,9 +127,68 @@ test("service charge, partial payment and doctor commission stay in sync", async
       assert.equal(await computePatientBalance(tx, clinic.id, patient.id), 0);
       assert.equal(await tx.patientAccountAllocation.count({ where: { clinicId: clinic.id } }), 2);
 
+      await recordRefund(tx, {
+        clinicId: clinic.id,
+        patientId: patient.id,
+        createdByUserId: doctor.id,
+        amount: 20,
+        description: "Test refund",
+        referencePaymentId: finalPayment.id,
+      });
+      const reversed = await tx.commissionEntry.findFirstOrThrow({
+        where: { clinicId: clinic.id, sourceId: charge.id },
+      });
+      assert.equal(reversed.status, "PARTIAL");
+      assert.equal(reversed.paidBaseAmount.toNumber(), 80);
+      assert.equal(reversed.earnedAmount.toNumber(), 8);
+      assert.equal(await computePatientBalance(tx, clinic.id, patient.id), 20);
+      assert.equal(await tx.patientAccountAllocationReversal.count({ where: { clinicId: clinic.id } }), 1);
+      assert.equal(await tx.commissionTransaction.count({ where: { clinicId: clinic.id, type: "REVERSAL" } }), 1);
+
+      await recordPayment(tx, {
+        clinicId: clinic.id,
+        patientId: patient.id,
+        createdByUserId: doctor.id,
+        amount: 20,
+        paymentMethod: "CARD",
+        description: "Replacement payment after refund",
+      });
+      const restored = await tx.commissionEntry.findFirstOrThrow({
+        where: { clinicId: clinic.id, sourceId: charge.id },
+      });
+      assert.equal(restored.status, "EARNED");
+      assert.equal(restored.earnedAmount.toNumber(), 10);
+      assert.equal(await computePatientBalance(tx, clinic.id, patient.id), 0);
+
+      const now = new Date();
+      const period = await closeCommissionPeriod(tx, {
+        clinicId: clinic.id,
+        startDate: now,
+        endDate: now,
+        closedByUserId: doctor.id,
+        note: "Integration test period",
+      });
+      assert.equal(period.totalAmount.toNumber(), 10);
+      assert.equal(period.settlements.length, 1);
+      assert.equal(period.settlements[0].earnedAmount.toNumber(), 10);
+
+      await recordCommissionPayout(tx, {
+        clinicId: clinic.id,
+        settlementId: period.settlements[0].id,
+        amount: 10,
+        paymentMethod: "TRANSFER",
+        paidByUserId: doctor.id,
+      });
+      const settlement = await tx.commissionSettlement.findUniqueOrThrow({
+        where: { id: period.settlements[0].id },
+      });
+      assert.equal(settlement.status, "PAID");
+      assert.equal(settlement.paidAmount.toNumber(), 10);
+      assert.equal(await tx.commissionPayout.count({ where: { clinicId: clinic.id } }), 1);
+
       verified = true;
       throw rollback;
-    }, { timeout: 20_000 });
+    }, { timeout: 60_000 });
   } catch (error) {
     if (error !== rollback) throw error;
   }

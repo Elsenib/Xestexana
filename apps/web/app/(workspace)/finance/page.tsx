@@ -27,7 +27,14 @@ type Debtor = {
 };
 
 type Patient = { id: string; firstName: string; lastName: string; phone: string };
-type Service = { id: string; name: string; price: number; code: string };
+type RefundablePayment = {
+  entryId: string;
+  receiptNumber: string | null;
+  paymentMethod: string | null;
+  amount: number;
+  refundableAmount: number;
+  createdAt: string;
+};
 
 export default function FinancePage() {
   return (
@@ -41,7 +48,7 @@ function FinanceWorkspace() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [debtors, setDebtors] = useState<Debtor[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
+  const [refundablePayments, setRefundablePayments] = useState<RefundablePayment[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -54,18 +61,12 @@ function FinanceWorkspace() {
     paymentMethod: "CASH" as "CASH" | "CARD" | "TRANSFER",
     description: "Klinika ödənişi",
   });
-  const [chargeForm, setChargeForm] = useState({
-    patientId: "",
-    serviceId: "",
-    amount: "",
-    description: "",
-  });
   const [depositForm, setDepositForm] = useState({
     patientId: "",
     amount: "",
     paymentMethod: "CASH" as "CASH" | "CARD" | "TRANSFER",
   });
-  const [refundForm, setRefundForm] = useState({ patientId: "", amount: "", description: "Geri qaytarma" });
+  const [refundForm, setRefundForm] = useState({ patientId: "", referencePaymentId: "", amount: "", description: "Geri qaytarma" });
   const [periodDate, setPeriodDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lastReceiptEntryId, setLastReceiptEntryId] = useState<string | null>(null);
 
@@ -76,21 +77,19 @@ function FinanceWorkspace() {
     setLoading(true);
     setError("");
     try {
-      const [financeSummary, debtorRows, patientRows, serviceRows] = await Promise.all([
+      const [financeSummary, debtorRows, patientRows] = await Promise.all([
         apiRequest<FinanceSummary>("/finance/summary"),
         apiRequest<Debtor[]>("/finance/debtors?take=20"),
         apiRequest<Patient[]>("/patients?take=100"),
-        apiRequest<Service[]>("/services").catch(() => []),
       ]);
       setSummary(financeSummary);
       setDebtors(debtorRows);
       setPatients(patientRows);
-      setServices(serviceRows);
       if (!paymentForm.patientId && debtorRows[0]) {
         setPaymentForm((value) => ({ ...value, patientId: debtorRows[0].patientId }));
       }
-      if (!chargeForm.patientId && patientRows[0]) {
-        setChargeForm((value) => ({ ...value, patientId: patientRows[0].id }));
+      if (!refundForm.patientId && patientRows[0]) {
+        setRefundForm((value) => ({ ...value, patientId: patientRows[0].id }));
       }
       if (financeSummary.openSession) {
         setCloseBalance(String(financeSummary.openSession.expectedBalance ?? 0));
@@ -112,7 +111,6 @@ function FinanceWorkspace() {
       setPaymentForm((value) => ({ ...value, patientId }));
       setDepositForm((value) => ({ ...value, patientId }));
       setRefundForm((value) => ({ ...value, patientId }));
-      setChargeForm((value) => ({ ...value, patientId }));
     }
   }, [searchParams]);
 
@@ -170,28 +168,6 @@ function FinanceWorkspace() {
     }
   }
 
-  async function submitCharge(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    setNotice("");
-    try {
-      const result = await apiRequest<{ balance: number }>("/finance/charges", {
-        method: "POST",
-        body: JSON.stringify({
-          patientId: chargeForm.patientId,
-          serviceId: chargeForm.serviceId || undefined,
-          amount: chargeForm.serviceId ? undefined : Number(chargeForm.amount),
-          description: chargeForm.description || "Klinika xidməti",
-        }),
-      });
-      setNotice(`Borc yazıldı. Yeni balans: ${result.balance.toFixed(2)} AZN`);
-      setChargeForm((value) => ({ ...value, amount: "", description: "" }));
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Borc yazılmadı.");
-    }
-  }
-
   async function submitDeposit(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -213,16 +189,39 @@ function FinanceWorkspace() {
     setError("");
     setNotice("");
     try {
-      await apiRequest("/finance/refunds", {
+      const result = await apiRequest<{ message?: string; receiptNumber?: string }>("/finance/refunds", {
         method: "POST",
         body: JSON.stringify({ ...refundForm, amount: Number(refundForm.amount) }),
       });
-      setNotice("Refund qeydə alındı.");
+      setNotice(result.message ?? `Refund qeydə alındı${result.receiptNumber ? `: ${result.receiptNumber}` : ""}.`);
+      setRefundForm((value) => ({ ...value, referencePaymentId: "", amount: "" }));
       await load();
+      await refreshRefundablePayments(refundForm.patientId);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Refund qeydə alınmadı.");
     }
   }
+
+  async function refreshRefundablePayments(patientId: string) {
+    if (!patientId) {
+      setRefundablePayments([]);
+      return;
+    }
+    const rows = await apiRequest<RefundablePayment[]>(`/finance/payments/refundable?patientId=${encodeURIComponent(patientId)}`);
+    setRefundablePayments(rows);
+    if (!rows.some((row) => row.entryId === refundForm.referencePaymentId)) {
+      setRefundForm((value) => ({
+        ...value,
+        referencePaymentId: rows[0]?.entryId ?? "",
+        amount: rows[0] ? String(rows[0].refundableAmount) : "",
+      }));
+    }
+  }
+
+  useEffect(() => {
+    void refreshRefundablePayments(refundForm.patientId)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Qəbzlər yüklənmədi."));
+  }, [refundForm.patientId]);
 
   async function closePeriod(event: FormEvent) {
     event.preventDefault();
@@ -401,50 +400,6 @@ function FinanceWorkspace() {
         </aside>
       </div>
 
-      <section className="ws-panel pc-section" style={{ marginTop: 22 }}>
-        <header className="ws-registry-tools">
-          <span>Manual xidmət borcu</span>
-        </header>
-        <form className="ws-form-grid" onSubmit={submitCharge} style={{ padding: 20 }}>
-          <label className="ws-form-wide">
-            Pasiyent
-            <select required value={chargeForm.patientId} onChange={(e) => setChargeForm({ ...chargeForm, patientId: e.target.value })}>
-              {patients.map((patient) => (
-                <option key={patient.id} value={patient.id}>
-                  {patient.firstName} {patient.lastName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="ws-form-wide">
-            Xidmət (ixtiyari)
-            <select value={chargeForm.serviceId} onChange={(e) => setChargeForm({ ...chargeForm, serviceId: e.target.value })}>
-              <option value="">Manual məbləğ</option>
-              {services.map((service) => (
-                <option key={service.id} value={service.id}>
-                  {service.name} · {service.price} ₼
-                </option>
-              ))}
-            </select>
-          </label>
-          {!chargeForm.serviceId && (
-            <label>
-              Məbləğ (AZN)
-              <input type="number" min="0.01" step="0.01" required value={chargeForm.amount} onChange={(e) => setChargeForm({ ...chargeForm, amount: e.target.value })} />
-            </label>
-          )}
-          <label className="ws-form-wide">
-            Açıqlama
-            <input required value={chargeForm.description} onChange={(e) => setChargeForm({ ...chargeForm, description: e.target.value })} placeholder="Məs. Müalicə xidməti" />
-          </label>
-          <footer className="ws-form-wide">
-            <button type="submit" className="ws-button ws-button--primary">
-              Borc yaz
-            </button>
-          </footer>
-        </form>
-      </section>
-
       <div className="ws-dashboard-grid" style={{ marginTop: 22 }}>
         <section className="ws-panel pc-section">
           <p className="ws-eyebrow">Depozit</p>
@@ -484,6 +439,24 @@ function FinanceWorkspace() {
               <select required value={refundForm.patientId} onChange={(e) => setRefundForm({ ...refundForm, patientId: e.target.value })}>
                 {patients.map((patient) => (
                   <option key={patient.id} value={patient.id}>{patient.firstName} {patient.lastName}</option>
+                ))}
+              </select>
+            </label>
+            <label className="ws-form-wide">
+              Qaytarılacaq qəbz
+              <select
+                required
+                value={refundForm.referencePaymentId}
+                onChange={(e) => {
+                  const payment = refundablePayments.find((row) => row.entryId === e.target.value);
+                  setRefundForm({ ...refundForm, referencePaymentId: e.target.value, amount: payment ? String(payment.refundableAmount) : "" });
+                }}
+              >
+                <option value="">Qəbz seçin</option>
+                {refundablePayments.map((payment) => (
+                  <option key={payment.entryId} value={payment.entryId}>
+                    {payment.receiptNumber ?? payment.entryId} · {new Date(payment.createdAt).toLocaleDateString("az-AZ")} · qalıq {payment.refundableAmount.toFixed(2)} ₼
+                  </option>
                 ))}
               </select>
             </label>

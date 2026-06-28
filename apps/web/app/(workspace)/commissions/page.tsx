@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiRequest, CurrentUser } from "../../../lib/lovelydent-api";
 
 type Doctor = { userId: string; email: string; name: string; branch: string | null };
+type Service = { id: string; code: string; name: string; active: boolean };
 type CommissionRule = {
   id: string;
   doctorName: string;
@@ -31,8 +32,28 @@ type Summary = {
   rules: CommissionRule[];
   entries: CommissionEntry[];
 };
+type CommissionPeriod = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  totalAmount: number;
+  status: string;
+  note: string | null;
+  closedAt: string;
+  closedBy: string;
+  settlements: Array<{
+    id: string;
+    doctorName: string;
+    earnedAmount: number;
+    paidAmount: number;
+    status: string;
+    payouts: Array<{ id: string; amount: number; paymentMethod: string; paidAt: string }>;
+  }>;
+};
 
-const defaultRule = { doctorUserId: "", percent: "10" };
+const defaultRule = { doctorUserId: "", serviceId: "", percent: "10" };
+const today = new Date().toISOString().slice(0, 10);
+const monthStart = `${today.slice(0, 8)}01`;
 
 function money(value: number) {
   return `${value.toFixed(2)} ₼`;
@@ -40,12 +61,16 @@ function money(value: number) {
 
 export default function CommissionsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [periods, setPeriods] = useState<CommissionPeriod[]>([]);
   const [ruleForm, setRuleForm] = useState(defaultRule);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [periodForm, setPeriodForm] = useState({ startDate: monthStart, endDate: today, note: "" });
+  const [payoutForms, setPayoutForms] = useState<Record<string, { amount: string; paymentMethod: "CASH" | "CARD" | "TRANSFER" }>>({});
   const canManageRules = user?.role === "SUPER_ADMIN";
 
   const doctorOptions = useMemo(
@@ -54,14 +79,18 @@ export default function CommissionsPage() {
   );
 
   async function load() {
-    const [me, doctorRows, summaryRow] = await Promise.all([
+    const [me, doctorRows, summaryRow, serviceRows, periodRows] = await Promise.all([
       apiRequest<CurrentUser>("/auth/me"),
       apiRequest<Doctor[]>("/commissions/doctors"),
       apiRequest<Summary>("/commissions/summary"),
+      apiRequest<Service[]>("/services").catch(() => [] as Service[]),
+      apiRequest<CommissionPeriod[]>("/commissions/periods"),
     ]);
     setUser(me);
     setDoctors(doctorRows);
     setSummary(summaryRow);
+    setServices(serviceRows.filter((service) => service.active));
+    setPeriods(periodRows);
   }
 
   useEffect(() => {
@@ -78,6 +107,7 @@ export default function CommissionsPage() {
         method: "POST",
         body: JSON.stringify({
           doctorUserId: ruleForm.doctorUserId || undefined,
+          serviceId: ruleForm.serviceId || undefined,
           percent: Number(ruleForm.percent),
         }),
       });
@@ -86,6 +116,40 @@ export default function CommissionsPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Faiz qaydası saxlanmadı.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function closePeriod(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(""); setNotice(""); setSaving(true);
+    try {
+      await apiRequest("/commissions/periods/close", {
+        method: "POST",
+        body: JSON.stringify({ ...periodForm, note: periodForm.note || undefined }),
+      });
+      setNotice("Komissiya periodu bağlandı və həkim hesablaşmaları yaradıldı.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Komissiya periodu bağlanmadı.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function paySettlement(settlementId: string, available: number) {
+    const form = payoutForms[settlementId] ?? { amount: String(available), paymentMethod: "TRANSFER" as const };
+    setError(""); setNotice(""); setSaving(true);
+    try {
+      await apiRequest(`/commissions/settlements/${settlementId}/payout`, {
+        method: "POST",
+        body: JSON.stringify({ amount: Number(form.amount), paymentMethod: form.paymentMethod }),
+      });
+      setNotice("Həkim komissiyası ödəniş tarixçəsinə yazıldı.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Komissiya ödənişi qeydə alınmadı.");
     } finally {
       setSaving(false);
     }
@@ -158,6 +222,15 @@ export default function CommissionsPage() {
               </select>
             </label>
             <label>
+              Xidmət
+              <select value={ruleForm.serviceId} onChange={(e) => setRuleForm((v) => ({ ...v, serviceId: e.target.value }))}>
+                <option value="">Bütün xidmətlər</option>
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>{service.code} · {service.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
               Faiz
               <input
                 type="number"
@@ -225,6 +298,56 @@ export default function CommissionsPage() {
             {!summary?.entries.length ? <p className="ws-empty">Hələ komissiya sətri yoxdur.</p> : null}
           </div>
         </article>
+      </section>
+
+      {canManageRules ? (
+        <form className="ws-panel pc-form" onSubmit={closePeriod} style={{ marginTop: 22 }}>
+          <header><div><p className="ws-eyebrow">Hesablaşma periodu</p><h2>Komissiya periodunu bağla</h2></div></header>
+          <div className="ws-form-grid">
+            <label>Başlanğıc<input type="date" required value={periodForm.startDate} onChange={(e) => setPeriodForm((v) => ({ ...v, startDate: e.target.value }))} /></label>
+            <label>Son tarix<input type="date" required value={periodForm.endDate} onChange={(e) => setPeriodForm((v) => ({ ...v, endDate: e.target.value }))} /></label>
+            <label className="ws-form-wide">Qeyd<input value={periodForm.note} onChange={(e) => setPeriodForm((v) => ({ ...v, note: e.target.value }))} /></label>
+            <footer className="ws-form-wide"><button className="ws-button ws-button--primary" disabled={saving}>Periodu bağla</button></footer>
+          </div>
+        </form>
+      ) : null}
+
+      <section className="ws-panel pc-section" style={{ marginTop: 22 }}>
+        <header><div><p className="ws-eyebrow">Period tarixçəsi</p><h2>Həkim hesablaşmaları və ödənişlər</h2></div></header>
+        <div className="ws-flow-list">
+          {periods.map((period) => (
+            <article className="ws-flow-card" key={period.id} style={{ alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <strong>{new Date(period.startDate).toLocaleDateString("az-AZ")} – {new Date(period.endDate).toLocaleDateString("az-AZ")} · {money(period.totalAmount)}</strong>
+                <span>{period.closedBy} · {period.note || "Qeyd yoxdur"}</span>
+                <div className="ws-flow-list" style={{ marginTop: 12 }}>
+                  {period.settlements.map((settlement) => {
+                    const available = Math.max(0, settlement.earnedAmount - settlement.paidAmount);
+                    const form = payoutForms[settlement.id] ?? { amount: String(available), paymentMethod: "TRANSFER" as const };
+                    return (
+                      <div className="ws-flow-card" key={settlement.id}>
+                        <div>
+                          <b>{settlement.doctorName}</b>
+                          <span>Hesablandı {money(settlement.earnedAmount)} · ödənildi {money(settlement.paidAmount)} · {settlement.status}</span>
+                        </div>
+                        {canManageRules && available > 0 ? (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <input aria-label="Ödəniş məbləği" type="number" min="0.01" step="0.01" max={available} value={form.amount} onChange={(e) => setPayoutForms((v) => ({ ...v, [settlement.id]: { ...form, amount: e.target.value } }))} />
+                            <select aria-label="Ödəniş metodu" value={form.paymentMethod} onChange={(e) => setPayoutForms((v) => ({ ...v, [settlement.id]: { ...form, paymentMethod: e.target.value as "CASH" | "CARD" | "TRANSFER" } }))}>
+                              <option value="TRANSFER">Köçürmə</option><option value="CARD">Kart</option><option value="CASH">Nağd</option>
+                            </select>
+                            <button type="button" className="ws-row-action" disabled={saving} onClick={() => void paySettlement(settlement.id, available)}>Ödə</button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </article>
+          ))}
+          {!periods.length ? <p className="ws-empty">Hələ bağlanmış komissiya periodu yoxdur.</p> : null}
+        </div>
       </section>
     </div>
   );

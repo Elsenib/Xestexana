@@ -130,6 +130,8 @@ export async function approvalRoutes(app: FastifyInstance) {
               return { error: "INSUFFICIENT" as const, balance: applied.balance };
             }
             if (applied.error === "UNSUPPORTED") return { error: "UNSUPPORTED" as const };
+            if (applied.error === "CASH_SESSION_REQUIRED") return { error: "CASH_SESSION_REQUIRED" as const };
+            if (applied.error === "REFUND_EXCEEDS_PAYMENT") return { error: "REFUND_EXCEEDS_PAYMENT" as const };
 
             const approved = await tx.approvalRequest.update({
               where: { id },
@@ -167,6 +169,12 @@ export async function approvalRoutes(app: FastifyInstance) {
           }
           if (err === "UNSUPPORTED") {
             return reply.code(400).send({ message: "Bu əməliyyat növü dəstəklənmir və ya artıq tətbiq olunub." });
+          }
+          if (err === "CASH_SESSION_REQUIRED") {
+            return reply.code(409).send({ message: "Nağd refund təsdiqlənməzdən əvvəl kassa növbəsi açılmalıdır." });
+          }
+          if (err === "REFUND_EXCEEDS_PAYMENT") {
+            return reply.code(409).send({ message: "Refund məbləği qəbzin qalan məbləğindən çoxdur." });
           }
           return reply.code(400).send({ message: "Sorğu rədd edildi." });
         }

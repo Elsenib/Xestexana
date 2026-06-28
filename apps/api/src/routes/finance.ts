@@ -11,7 +11,6 @@ import {
   getOpenCashSession,
   listDebtors,
   PAYMENT_METHODS,
-  recordCharge,
   recordDeposit,
   recordPayment,
   recordRefund,
@@ -24,6 +23,12 @@ import {
   auditRequestMeta,
   recordAudit,
 } from "../services/audit-service.js";
+import {
+  APPROVAL_ACTIONS,
+  approvalStatusMessage,
+  createApprovalRequest,
+  needsApproval,
+} from "../services/approval-service.js";
 
 const financeRoles = ["SUPER_ADMIN", "ADMIN", "CASHIER", "ACCOUNTANT"] as const;
 const cashierRoles = ["SUPER_ADMIN", "ADMIN", "CASHIER"] as const;
@@ -39,16 +44,6 @@ const chargeLineSchema = z
   .refine((row) => Boolean(row.serviceId || row.amount), {
     message: "Xidmət və ya məbləğ tələb olunur.",
   });
-
-const chargeSchema = z.object({
-  patientId: z.string().min(1),
-  amount: z.coerce.number().positive().max(999999999).optional(),
-  serviceId: z.string().min(1).optional(),
-  quantity: z.coerce.number().positive().max(1000).default(1),
-  description: z.string().trim().min(2).max(500),
-  referenceType: z.string().trim().max(80).nullable().optional(),
-  referenceId: z.string().trim().max(80).nullable().optional(),
-});
 
 const paymentSchema = z.object({
   patientId: z.string().min(1),
@@ -70,6 +65,12 @@ const closeSessionSchema = z.object({
 const patientParams = z.object({ patientId: z.string().min(1) });
 const sessionParams = z.object({ id: z.string().min(1) });
 const encounterParams = z.object({ id: z.string().min(1) });
+const refundSchema = z.object({
+  patientId: z.string().min(1),
+  amount: z.coerce.number().positive().max(999999999),
+  description: z.string().trim().min(2).max(500),
+  referencePaymentId: z.string().min(1),
+});
 
 export async function financeRoutes(app: FastifyInstance) {
   app.get(
@@ -249,88 +250,6 @@ export async function financeRoutes(app: FastifyInstance) {
   );
 
   app.post(
-    "/finance/charges",
-    { preHandler: [app.authenticate, app.authorize([...cashierRoles, "DOCTOR"])] },
-    async (request, reply) => {
-      const body = chargeSchema.parse(request.body);
-      const userId = request.user.sub!;
-
-      try {
-        const result = await app.prisma.$transaction(async (tx) => {
-          if (body.serviceId) {
-            const service = await tx.service.findFirst({
-              where: { id: body.serviceId, clinicId: request.user.clinicId, active: true },
-            });
-            if (!service) return { error: "SERVICE_NOT_FOUND" as const };
-            const amount = round(service.price.toNumber() * body.quantity);
-            const entry = await recordCharge(tx, {
-              clinicId: request.user.clinicId,
-              patientId: body.patientId,
-              createdByUserId: userId,
-              amount,
-              serviceId: body.serviceId,
-              description: body.description,
-              referenceType: body.referenceType ?? null,
-              referenceId: body.referenceId ?? null,
-            });
-            return { entry, balance: await computePatientBalance(tx, request.user.clinicId, body.patientId) };
-          }
-
-          if (!body.amount) return { error: "INVALID_AMOUNT" as const };
-          const entry = await recordCharge(tx, {
-            clinicId: request.user.clinicId,
-            patientId: body.patientId,
-            createdByUserId: userId,
-            amount: body.amount,
-            description: body.description,
-            referenceType: body.referenceType ?? null,
-            referenceId: body.referenceId ?? null,
-          });
-          return { entry, balance: await computePatientBalance(tx, request.user.clinicId, body.patientId) };
-        });
-
-        if ("error" in result) {
-          if (result.error === "SERVICE_NOT_FOUND") {
-            return reply.code(400).send({ message: "Xidmət tapılmadı." });
-          }
-          if (result.error === "INVALID_AMOUNT") {
-            return reply.code(400).send({ message: "Məbləğ tələb olunur." });
-          }
-          return reply.code(400).send({ message: "Sorğu rədd edildi." });
-        }
-
-        await recordAudit(app.prisma, {
-          ...actorFromRequest(request),
-          ...auditRequestMeta(request),
-          category: AUDIT_CATEGORIES.FINANCE,
-          action: AUDIT_ACTIONS.CHARGE_RECORDED,
-          entityType: "PatientAccountEntry",
-          entityId: result.entry.id,
-          summary: `Borc yazıldı · ${result.entry.amount.toNumber().toFixed(2)} ₼`,
-          details: {
-            patientId: body.patientId,
-            amount: result.entry.amount.toNumber(),
-            description: body.description,
-            balance: result.balance,
-          },
-        });
-
-        return reply.code(201).send({
-          entryId: result.entry.id,
-          balance: result.balance,
-        });
-      } catch (error) {
-        if (error instanceof Error) {
-          if (error.message === "PATIENT_NOT_FOUND") {
-            return reply.code(404).send({ message: "Pasiyent tapılmadı." });
-          }
-        }
-        throw error;
-      }
-    },
-  );
-
-  app.post(
     "/finance/clinical-encounters/:id/charges",
     { preHandler: [app.authenticate, app.authorize([...cashierRoles, "DOCTOR"])] },
     async (request, reply) => {
@@ -504,29 +423,89 @@ export async function financeRoutes(app: FastifyInstance) {
     },
   );
 
+  app.get(
+    "/finance/payments/refundable",
+    { preHandler: [app.authenticate, app.authorize([...financeRoles])] },
+    async (request, reply) => {
+      const { patientId } = z.object({ patientId: z.string().min(1) }).parse(request.query);
+      const patient = await app.prisma.patientProfile.findFirst({
+        where: { id: patientId, clinicId: request.user.clinicId },
+        select: { id: true },
+      });
+      if (!patient) return reply.code(404).send({ message: "Pasiyent tapılmadı." });
+      const [payments, refunds] = await app.prisma.$transaction([
+        app.prisma.patientAccountEntry.findMany({
+          where: {
+            clinicId: request.user.clinicId,
+            patientId,
+            entryType: "PAYMENT",
+            direction: "CREDIT",
+          },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+        app.prisma.patientAccountEntry.findMany({
+          where: {
+            clinicId: request.user.clinicId,
+            patientId,
+            entryType: "REFUND",
+            referenceType: "PatientAccountEntry",
+          },
+          select: { referenceId: true, amount: true },
+        }),
+      ]);
+      const refunded = new Map<string, number>();
+      for (const row of refunds) {
+        if (row.referenceId) refunded.set(row.referenceId, (refunded.get(row.referenceId) ?? 0) + row.amount.toNumber());
+      }
+      return payments
+        .map((payment) => ({
+          entryId: payment.id,
+          receiptNumber: payment.receiptNumber,
+          paymentMethod: payment.paymentMethod,
+          amount: payment.amount.toNumber(),
+          refundableAmount: round(payment.amount.toNumber() - (refunded.get(payment.id) ?? 0)),
+          createdAt: payment.createdAt.toISOString(),
+        }))
+        .filter((payment) => payment.refundableAmount > 0);
+    },
+  );
+
   app.post(
     "/finance/refunds",
-    { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"])] },
+    { preHandler: [app.authenticate, app.authorize([...financeRoles])] },
     async (request, reply) => {
-      const body = z
-        .object({
-          patientId: z.string().min(1),
-          amount: z.coerce.number().positive().max(999999999),
-          description: z.string().trim().min(2).max(500),
-          referencePaymentId: z.string().min(1).optional(),
-        })
-        .parse(request.body);
+      const body = refundSchema.parse(request.body);
       const userId = request.user.sub!;
+
+      if (needsApproval(request.user.role, APPROVAL_ACTIONS.FINANCE_REFUND)) {
+        const approval = await createApprovalRequest(app.prisma, {
+          clinicId: request.user.clinicId,
+          requestedByUserId: userId,
+          requesterRole: request.user.role,
+          actionType: APPROVAL_ACTIONS.FINANCE_REFUND,
+          entityType: "PatientAccountEntry",
+          entityId: body.referencePaymentId,
+          payload: body,
+        });
+        return reply.code(202).send({
+          approvalId: approval.id,
+          status: approval.status,
+          message: approvalStatusMessage(approval.reviewerRole, approval.reviewerUserId),
+        });
+      }
 
       try {
         const result = await app.prisma.$transaction(async (tx) => {
+          const session = await getOpenCashSession(tx, request.user.clinicId);
           const entry = await recordRefund(tx, {
             clinicId: request.user.clinicId,
             patientId: body.patientId,
             createdByUserId: userId,
             amount: body.amount,
             description: body.description,
-            referencePaymentId: body.referencePaymentId ?? null,
+            referencePaymentId: body.referencePaymentId,
+            cashSessionId: session?.id ?? null,
           });
           return {
             entry,
@@ -546,6 +525,7 @@ export async function financeRoutes(app: FastifyInstance) {
         });
 
         return reply.code(201).send({
+          entryId: result.entry.id,
           receiptNumber: result.entry.receiptNumber,
           balance: result.balance,
         });
@@ -554,6 +534,10 @@ export async function financeRoutes(app: FastifyInstance) {
           const map: Record<string, string> = {
             PATIENT_NOT_FOUND: "Pasiyent tapılmadı.",
             PAYMENT_NOT_FOUND: "Ödəniş tapılmadı.",
+            REFUND_EXCEEDS_PAYMENT: "Refund məbləği qəbzin qalan məbləğindən çoxdur.",
+            REFUND_ALLOCATION_MISSING: "Ödəniş bölgüsü tapılmadı; refund təhlükəsiz tətbiq edilə bilmədi.",
+            CASH_SESSION_REQUIRED: "Nağd refund üçün açıq kassa növbəsi tələb olunur.",
+            CASH_SESSION_CLOSED: "Nağd refund üçün kassa növbəsi açıq deyil.",
             PERIOD_CLOSED: "Maliyyə periodu bağlıdır.",
           };
           if (map[error.message]) return reply.code(400).send({ message: map[error.message] });

@@ -47,17 +47,24 @@ export async function computeCashSessionExpected(
   sessionId: string,
   openingBalance: Prisma.Decimal,
 ) {
-  const payments = await tx.patientAccountEntry.findMany({
+  const movements = await tx.patientAccountEntry.findMany({
     where: {
       clinicId,
       cashSessionId: sessionId,
-      entryType: { in: [ENTRY_TYPES.PAYMENT, ENTRY_TYPES.DEPOSIT] },
+      entryType: { in: [ENTRY_TYPES.PAYMENT, ENTRY_TYPES.DEPOSIT, ENTRY_TYPES.REFUND] },
       paymentMethod: "CASH",
     },
-    select: { amount: true },
+    select: { entryType: true, amount: true },
   });
-  const cashIn = payments.reduce((sum, row) => sum + row.amount.toNumber(), 0);
-  return roundMoney(openingBalance.toNumber() + cashIn);
+  const cashNet = movements.reduce(
+    (sum, row) => sum + (row.entryType === ENTRY_TYPES.REFUND ? -1 : 1) * row.amount.toNumber(),
+    0,
+  );
+  const payouts = await tx.commissionPayout.aggregate({
+    where: { clinicId, cashSessionId: sessionId, paymentMethod: "CASH" },
+    _sum: { amount: true },
+  });
+  return roundMoney(openingBalance.toNumber() + cashNet - (payouts._sum.amount?.toNumber() ?? 0));
 }
 
 export function roundMoney(value: number) {
@@ -156,13 +163,19 @@ async function syncChargeCommission(tx: Tx, clinicId: string, chargeEntryId: str
   });
   if (!commission) return null;
 
-  const allocations = await tx.patientAccountAllocation.aggregate({
+  const allocations = await tx.patientAccountAllocation.findMany({
     where: { clinicId, debitEntryId: chargeEntryId },
-    _sum: { amount: true },
+    include: { reversals: { select: { amount: true } } },
   });
   const paidBaseAmount = Math.min(
     commission.baseAmount.toNumber(),
-    roundMoney(allocations._sum.amount?.toNumber() ?? 0),
+    roundMoney(
+      allocations.reduce(
+        (sum, allocation) =>
+          sum + allocation.amount.toNumber() - allocation.reversals.reduce((reversed, row) => reversed + row.amount.toNumber(), 0),
+        0,
+      ),
+    ),
   );
   const earnedAmount = roundMoney((paidBaseAmount * commission.percent.toNumber()) / 100);
   const fullyEarned = paidBaseAmount >= commission.baseAmount.toNumber() - 0.009;
@@ -225,7 +238,7 @@ async function allocateAmount(
   input: { clinicId: string; debitEntryId: string; creditEntryId: string; amount: number },
 ) {
   if (input.amount <= 0) return;
-  await tx.patientAccountAllocation.create({
+  const allocation = await tx.patientAccountAllocation.create({
     data: {
       clinicId: input.clinicId,
       debitEntryId: input.debitEntryId,
@@ -233,6 +246,23 @@ async function allocateAmount(
       amount: roundMoney(input.amount),
     },
   });
+  const commission = await tx.commissionEntry.findFirst({
+    where: { clinicId: input.clinicId, sourceType: "SERVICE_CHARGE", sourceId: input.debitEntryId },
+  });
+  if (commission) {
+    await tx.commissionTransaction.create({
+      data: {
+        clinicId: input.clinicId,
+        commissionEntryId: commission.id,
+        doctorUserId: commission.doctorUserId,
+        type: "EARNING",
+        sourceType: "PatientAccountAllocation",
+        sourceId: allocation.id,
+        baseAmount: allocation.amount,
+        amount: roundMoney((allocation.amount.toNumber() * commission.percent.toNumber()) / 100),
+      },
+    });
+  }
   await syncChargeCommission(tx, input.clinicId, input.debitEntryId);
 }
 
@@ -264,12 +294,19 @@ export async function allocateCreditToCharges(
       direction: "DEBIT",
     },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    include: { debitAllocations: { select: { amount: true } } },
+    include: {
+      debitAllocations: {
+        include: { reversals: { select: { amount: true } } },
+      },
+    },
   });
 
   for (const charge of charges) {
     if (remaining <= 0) break;
-    const allocated = charge.debitAllocations.reduce((sum, row) => sum + row.amount.toNumber(), 0);
+    const allocated = charge.debitAllocations.reduce(
+      (sum, row) => sum + row.amount.toNumber() - row.reversals.reduce((reversed, reversal) => reversed + reversal.amount.toNumber(), 0),
+      0,
+    );
     const outstanding = roundMoney(charge.amount.toNumber() - allocated);
     if (outstanding <= 0) continue;
     const amount = Math.min(remaining, outstanding);
@@ -635,7 +672,8 @@ export async function recordRefund(
     createdByUserId: string;
     amount: number;
     description: string;
-    referencePaymentId?: string | null;
+    referencePaymentId: string;
+    cashSessionId?: string | null;
   },
 ) {
   await assertFinanceWritable(tx, input.clinicId);
@@ -647,19 +685,45 @@ export async function recordRefund(
   });
   if (!patient) throw new Error("PATIENT_NOT_FOUND");
 
-  if (input.referencePaymentId) {
-    const payment = await tx.patientAccountEntry.findFirst({
-      where: {
-        id: input.referencePaymentId,
-        clinicId: input.clinicId,
-        patientId: input.patientId,
-        entryType: ENTRY_TYPES.PAYMENT,
+  const payment = await tx.patientAccountEntry.findFirst({
+    where: {
+      id: input.referencePaymentId,
+      clinicId: input.clinicId,
+      patientId: input.patientId,
+      entryType: ENTRY_TYPES.PAYMENT,
+      direction: "CREDIT",
+    },
+    include: {
+      creditAllocations: {
+        orderBy: { createdAt: "desc" },
+        include: { reversals: { select: { amount: true } } },
       },
+    },
+  });
+  if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+
+  const previousRefunds = await tx.patientAccountEntry.aggregate({
+    where: {
+      clinicId: input.clinicId,
+      patientId: input.patientId,
+      entryType: ENTRY_TYPES.REFUND,
+      referenceType: "PatientAccountEntry",
+      referenceId: payment.id,
+    },
+    _sum: { amount: true },
+  });
+  const refundable = roundMoney(payment.amount.toNumber() - (previousRefunds._sum.amount?.toNumber() ?? 0));
+  if (input.amount > refundable + 0.009) throw new Error("REFUND_EXCEEDS_PAYMENT");
+
+  if (payment.paymentMethod === "CASH") {
+    if (!input.cashSessionId) throw new Error("CASH_SESSION_REQUIRED");
+    const session = await tx.cashSession.findFirst({
+      where: { id: input.cashSessionId, clinicId: input.clinicId, status: "OPEN" },
     });
-    if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+    if (!session) throw new Error("CASH_SESSION_CLOSED");
   }
 
-  return tx.patientAccountEntry.create({
+  const entry = await tx.patientAccountEntry.create({
     data: {
       clinicId: input.clinicId,
       patientId: input.patientId,
@@ -667,12 +731,54 @@ export async function recordRefund(
       direction: "DEBIT",
       amount: input.amount,
       description: input.description,
-      referenceType: input.referencePaymentId ? "PatientAccountEntry" : null,
-      referenceId: input.referencePaymentId ?? null,
+      paymentMethod: payment.paymentMethod,
+      referenceType: "PatientAccountEntry",
+      referenceId: payment.id,
       receiptNumber: nextReceiptNumber(),
+      cashSessionId: payment.paymentMethod === "CASH" ? input.cashSessionId : null,
       createdByUserId: input.createdByUserId,
     },
   });
+
+  let remaining = roundMoney(input.amount);
+  for (const allocation of payment.creditAllocations) {
+    if (remaining <= 0) break;
+    const alreadyReversed = allocation.reversals.reduce((sum, row) => sum + row.amount.toNumber(), 0);
+    const reversible = roundMoney(allocation.amount.toNumber() - alreadyReversed);
+    if (reversible <= 0) continue;
+    const amount = Math.min(remaining, reversible);
+    const reversal = await tx.patientAccountAllocationReversal.create({
+      data: {
+        clinicId: input.clinicId,
+        allocationId: allocation.id,
+        refundEntryId: entry.id,
+        amount,
+      },
+    });
+
+    const commission = await tx.commissionEntry.findFirst({
+      where: { clinicId: input.clinicId, sourceType: "SERVICE_CHARGE", sourceId: allocation.debitEntryId },
+    });
+    if (commission) {
+      await tx.commissionTransaction.create({
+        data: {
+          clinicId: input.clinicId,
+          commissionEntryId: commission.id,
+          doctorUserId: commission.doctorUserId,
+          type: "REVERSAL",
+          sourceType: "PatientAccountAllocationReversal",
+          sourceId: reversal.id,
+          baseAmount: -amount,
+          amount: -roundMoney((amount * commission.percent.toNumber()) / 100),
+        },
+      });
+    }
+    await syncChargeCommission(tx, input.clinicId, allocation.debitEntryId);
+    remaining = roundMoney(remaining - amount);
+  }
+
+  if (remaining > 0.009) throw new Error("REFUND_ALLOCATION_MISSING");
+  return entry;
 }
 
 export async function financeReportSummary(

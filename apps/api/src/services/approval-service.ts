@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { UserRole } from "@hospital/shared";
 import {
   applyEncounterCompletionWithCharges,
+  getOpenCashSession,
+  recordRefund,
   type ChargeLineInput,
 } from "./finance-service.js";
 import { AUDIT_ACTIONS, AUDIT_CATEGORIES, recordAudit } from "./audit-service.js";
@@ -11,6 +13,7 @@ export const APPROVAL_ACTIONS = {
   STOCK_MOVEMENT: "STOCK_MOVEMENT",
   CLINICAL_ENCOUNTER_COMPLETE: "CLINICAL_ENCOUNTER_COMPLETE",
   SERVICE_UPSERT: "SERVICE_UPSERT",
+  FINANCE_REFUND: "FINANCE_REFUND",
 } as const;
 
 export type ApprovalActionType = (typeof APPROVAL_ACTIONS)[keyof typeof APPROVAL_ACTIONS];
@@ -55,6 +58,13 @@ const encounterCompletePayloadSchema = z.object({
     .optional(),
 });
 
+const financeRefundPayloadSchema = z.object({
+  patientId: z.string().min(1),
+  amount: z.coerce.number().positive(),
+  description: z.string().min(2).max(500),
+  referencePaymentId: z.string().min(1),
+});
+
 function signedStock(type: string, quantity: Prisma.Decimal) {
   return (STOCK_INCOMING.has(type) ? 1 : -1) * quantity.toNumber();
 }
@@ -79,6 +89,10 @@ export function resolveReviewer(
   }
 
   if (actionType === APPROVAL_ACTIONS.SERVICE_UPSERT) {
+    return { reviewerRole: "SUPER_ADMIN", reviewerUserId: null };
+  }
+
+  if (actionType === APPROVAL_ACTIONS.FINANCE_REFUND) {
     return { reviewerRole: "SUPER_ADMIN", reviewerUserId: null };
   }
 
@@ -139,7 +153,10 @@ export async function applyApprovedAction(
     clinicId: string;
     entityId: string | null;
   },
-): Promise<{ error?: "ENTITY_NOT_FOUND" | "INSUFFICIENT" | "UNSUPPORTED"; balance?: number }> {
+): Promise<{
+  error?: "ENTITY_NOT_FOUND" | "INSUFFICIENT" | "UNSUPPORTED" | "CASH_SESSION_REQUIRED" | "REFUND_EXCEEDS_PAYMENT";
+  balance?: number;
+}> {
   if (approval.actionType === APPROVAL_ACTIONS.STOCK_MOVEMENT) {
     const movement = stockMovementPayloadSchema.parse(approval.payload);
     const product = await tx.product.findFirst({
@@ -224,6 +241,36 @@ export async function applyApprovedAction(
     }
 
     return { error: "UNSUPPORTED" };
+  }
+
+  if (approval.actionType === APPROVAL_ACTIONS.FINANCE_REFUND) {
+    const payload = financeRefundPayloadSchema.parse(approval.payload);
+    const session = await getOpenCashSession(tx, approval.clinicId);
+    try {
+      await recordRefund(tx, {
+        clinicId: approval.clinicId,
+        patientId: payload.patientId,
+        createdByUserId: approval.requestedByUserId,
+        amount: payload.amount,
+        description: payload.description,
+        referencePaymentId: payload.referencePaymentId,
+        cashSessionId: session?.id ?? null,
+      });
+      return {};
+    } catch (error) {
+      if (error instanceof Error) {
+        if (["PATIENT_NOT_FOUND", "PAYMENT_NOT_FOUND"].includes(error.message)) {
+          return { error: "ENTITY_NOT_FOUND" };
+        }
+        if (["CASH_SESSION_REQUIRED", "CASH_SESSION_CLOSED"].includes(error.message)) {
+          return { error: "CASH_SESSION_REQUIRED" };
+        }
+        if (error.message === "REFUND_EXCEEDS_PAYMENT") {
+          return { error: "REFUND_EXCEEDS_PAYMENT" };
+        }
+      }
+      return { error: "UNSUPPORTED" };
+    }
   }
 
   return { error: "UNSUPPORTED" };

@@ -733,8 +733,8 @@ Funksiya yalnız aşağıdakılar tamamlandıqda hazır sayılır:
 4. 🟡 Həkim qrafiki və randevu təqvimi — qrafik, uyğun vaxt və status axını var; həftəlik vizual təqvim genişləndirilməlidir.
 5. 🟡 Odontogram və klinik qəbul — versiyalanan odontogram, anamnez, klinik qəbulun qaralama və imzalanmış tamamlanma axını işləyir; düzəliş və müalicə planına keçid tamamlanmalıdır.
 6. 🟡 Müalicə planı və xidmət kataloqu — xidmət/qiymət kataloqu, plan sətirləri, diş və miqdar, endirim, serverdə sabitlənən qiymət, plan versiyası və status axını işləyir; qəbul edilmiş plan sətri real prosedur kimi tamamlanır və borca çevrilir; razılıq sənədi qalır.
-7. 🟡 Pasiyent hesabı, ödəniş və kassa növbəsi — real ledger, tam/qismən ödəniş, depozit, qəbz və kassa növbəsi işləyir; refund/reversal və reconciliation daha sərt biznes qaydaları ilə tamamlanmalıdır.
-8. 🟡 Avtomatik hesablama mühərriki, ledger-lər və period bağlanması — prosedur → borc → FIFO ödəniş bölgüsü → qəbz → ödənən hissəyə görə həkim komissiyası tranzaksiyalı işləyir; reversal təsiri və komissiya period hesablaşması qalır.
+7. ✅ Pasiyent hesabı, ödəniş və kassa növbəsi — real ledger, tam/qismən ödəniş, depozit, qəbz, kassa növbəsi və konkret qəbzə bağlı refund/reversal işləyir; nağd refund kassa qalığını azaldır və Super Admin təsdiqindən sonra tətbiq olunur.
+8. 🟡 Avtomatik hesablama mühərriki, ledger-lər və period bağlanması — prosedur → borc → FIFO ödəniş bölgüsü → qəbz → ödənən hissəyə görə həkim komissiyası, refund reversal ledger-i, komissiya periodu və payout tarixçəsi tranzaksiyalı işləyir; maya dəyəri/laboratoriya xərci və mənfəət mühərriki qalır.
 9. ✅ Fayl storage və sənədlər — pasiyent faylları verilənlər bazasında saxlanır, önbaxış, açma və endirmə işləyir.
 10. 🟡 Bildiriş queue-su və randevu xatırlatması — queue və recall tapşırıqları var; real SMS/WhatsApp/e-mail provider inteqrasiyası klinikanın seçiminə bağlıdır.
 11. 🟡 Mənbə əməliyyata qədər açıla bilən avtomatik dashboard və hesabatlar — ilkin əməliyyat göstəriciləri var; maliyyə drill-down-u ledger-dən sonra tamamlanacaq.
@@ -765,5 +765,8 @@ Status: `🟡 əsas klinik-maliyyə avtomatikası işləyir / qalan plan maddəl
 - `✅` Navbar qruplaşdırıldı: Gündəlik iş, Klinik iş, Maliyyə və resurs, İdarəetmə.
 - `✅` Scroll ilə gizlənən uzun navbar yanaşması ləğv edildi; modullar dropdown qruplarında göstərilir.
 - `🟡` `MANAGEMENT` rolu hələ klinika tərəfindən təsdiqlənmədiyi üçün genişləndirilmədi.
-- `🟡` Approval engine kritik klinik, xidmət və stok əməliyyatlarına bağlıdır; maliyyə reversal və manual adjustment axınına genişləndirilməlidir.
+- `🟡` Approval engine kritik klinik, xidmət, stok və refund əməliyyatlarına bağlıdır; endirim və ayrıca manual adjustment yalnız təsdiqli reversal kimi əlavə edilməlidir.
 - `✅` treatment → debt → FIFO payment allocation → receipt → paid doctor commission axını server tranzaksiyasında avtomatik işləyir.
+- `✅` Refund əvvəlki allocation-u silmir; ayrıca reversal ledger-i yaradır, pasiyent borcunu və həkim komissiyasını geri hesablayır.
+- `✅` Komissiya periodu bağlanır, həkim üzrə settlement yaranır, qismən/tam payout və nağd kassa təsiri tarixçədə saxlanır.
+- `✅` Manual xidmət borcu ekranı və açıq endpointi çıxarılıb; borc klinik prosedurun tamamlanmasından yaranır.

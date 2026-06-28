@@ -46,6 +46,7 @@ model Clinic {
   cashSessions               CashSession[]
   patientAccountEntries      PatientAccountEntry[]
   patientAccountAllocations  PatientAccountAllocation[]
+  accountAllocationReversals PatientAccountAllocationReversal[]
   auditLogs                  AuditLog[]
   patientFiles               PatientFile[]
   financePeriods             FinancePeriod[]
@@ -54,6 +55,10 @@ model Clinic {
   crmActivities              CRMActivity[]
   commissionRules            CommissionRule[]
   commissionEntries          CommissionEntry[]
+  commissionTransactions     CommissionTransaction[]
+  commissionPeriods          CommissionPeriod[]
+  commissionSettlements      CommissionSettlement[]
+  commissionPayouts          CommissionPayout[]
   warrantyTemplates          WarrantyTemplate[]
   patientWarranties          PatientWarranty[]
   backupJobs                 BackupJob[]
@@ -97,6 +102,10 @@ model User {
   crmActivities           CRMActivity[]               @relation("CRMActivityAuthor")
   commissionRules         CommissionRule[]            @relation("CommissionRuleDoctor")
   commissionEntries       CommissionEntry[]           @relation("CommissionEntryDoctor")
+  commissionTransactions  CommissionTransaction[]     @relation("CommissionTransactionDoctor")
+  closedCommissionPeriods CommissionPeriod[]          @relation("CommissionPeriodCloser")
+  commissionSettlements   CommissionSettlement[]      @relation("CommissionSettlementDoctor")
+  paidCommissionPayouts   CommissionPayout[]          @relation("CommissionPayoutPayer")
   completedTreatmentItems TreatmentPlanItem[]         @relation("TreatmentItemCompleter")
   issuedWarranties        PatientWarranty[]           @relation("WarrantyIssuer")
   createdBackupJobs       BackupJob[]                 @relation("BackupCreator")
@@ -367,20 +376,21 @@ model StockMovement {
 }
 
 model Service {
-  id              String                @id @default(cuid())
-  clinicId        String
-  code            String
-  name            String
-  category        String
-  price           Decimal               @db.Decimal(14, 2)
-  durationMinutes Int                   @default(30)
-  active          Boolean               @default(true)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  clinic          Clinic                @relation(fields: [clinicId], references: [id], onDelete: Restrict)
-  treatmentItems  TreatmentPlanItem[]
-  accountEntries  PatientAccountEntry[]
-  commissionRules CommissionRule[]
+  id                String                @id @default(cuid())
+  clinicId          String
+  code              String
+  name              String
+  category          String
+  price             Decimal               @db.Decimal(14, 2)
+  durationMinutes   Int                   @default(30)
+  active            Boolean               @default(true)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  clinic            Clinic                @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  treatmentItems    TreatmentPlanItem[]
+  accountEntries    PatientAccountEntry[]
+  commissionPayouts CommissionPayout[]
+  commissionRules   CommissionRule[]
 
   @@unique([clinicId, code])
   @@index([clinicId, active, category])
@@ -464,30 +474,113 @@ model CommissionRule {
 }
 
 model CommissionEntry {
-  id             String          @id @default(cuid())
+  id             String                  @id @default(cuid())
   clinicId       String
   doctorUserId   String
   patientId      String?
   sourceType     String
   sourceId       String?
-  baseAmount     Decimal         @db.Decimal(14, 2)
-  percent        Decimal         @db.Decimal(5, 2)
-  amount         Decimal         @db.Decimal(14, 2)
-  paidBaseAmount Decimal         @default(0) @db.Decimal(14, 2)
-  earnedAmount   Decimal         @default(0) @db.Decimal(14, 2)
-  status         String          @default("PENDING")
+  baseAmount     Decimal                 @db.Decimal(14, 2)
+  percent        Decimal                 @db.Decimal(5, 2)
+  amount         Decimal                 @db.Decimal(14, 2)
+  paidBaseAmount Decimal                 @default(0) @db.Decimal(14, 2)
+  earnedAmount   Decimal                 @default(0) @db.Decimal(14, 2)
+  status         String                  @default("PENDING")
   earnedAt       DateTime?
   note           String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  clinic         Clinic          @relation(fields: [clinicId], references: [id], onDelete: Restrict)
-  doctor         User            @relation("CommissionEntryDoctor", fields: [doctorUserId], references: [id], onDelete: Restrict)
-  patient        PatientProfile? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  clinic         Clinic                  @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  doctor         User                    @relation("CommissionEntryDoctor", fields: [doctorUserId], references: [id], onDelete: Restrict)
+  patient        PatientProfile?         @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  transactions   CommissionTransaction[]
 
   @@unique([clinicId, sourceType, sourceId])
   @@index([clinicId, doctorUserId, status])
   @@index([clinicId, createdAt])
   @@index([clinicId, sourceType, sourceId])
+}
+
+model CommissionTransaction {
+  id                String          @id @default(cuid())
+  clinicId          String
+  commissionEntryId String
+  doctorUserId      String
+  type              String
+  sourceType        String
+  sourceId          String
+  baseAmount        Decimal         @db.Decimal(14, 2)
+  amount            Decimal         @db.Decimal(14, 2)
+  createdAt         DateTime        @default(now())
+  clinic            Clinic          @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  commissionEntry   CommissionEntry @relation(fields: [commissionEntryId], references: [id], onDelete: Restrict)
+  doctor            User            @relation("CommissionTransactionDoctor", fields: [doctorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([clinicId, type, sourceId])
+  @@index([clinicId, doctorUserId, createdAt])
+  @@index([commissionEntryId, createdAt])
+}
+
+model CommissionPeriod {
+  id             String                 @id @default(cuid())
+  clinicId       String
+  startDate      DateTime
+  endDate        DateTime
+  status         String                 @default("CLOSED")
+  totalAmount    Decimal                @default(0) @db.Decimal(14, 2)
+  note           String?
+  closedByUserId String
+  closedAt       DateTime               @default(now())
+  createdAt      DateTime               @default(now())
+  clinic         Clinic                 @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  closedBy       User                   @relation("CommissionPeriodCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  settlements    CommissionSettlement[]
+
+  @@unique([clinicId, startDate, endDate])
+  @@index([clinicId, endDate])
+}
+
+model CommissionSettlement {
+  id           String             @id @default(cuid())
+  clinicId     String
+  periodId     String
+  doctorUserId String
+  earnedAmount Decimal            @db.Decimal(14, 2)
+  paidAmount   Decimal            @default(0) @db.Decimal(14, 2)
+  status       String             @default("UNPAID")
+  paidAt       DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  clinic       Clinic             @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  period       CommissionPeriod   @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  doctor       User               @relation("CommissionSettlementDoctor", fields: [doctorUserId], references: [id], onDelete: Restrict)
+  payouts      CommissionPayout[]
+
+  @@unique([periodId, doctorUserId])
+  @@index([clinicId, doctorUserId, status])
+}
+
+model CommissionPayout {
+  id            String               @id @default(cuid())
+  clinicId      String
+  settlementId  String
+  amount        Decimal              @db.Decimal(14, 2)
+  paymentMethod String
+  reference     String?
+  note          String?
+  paidByUserId  String
+  cashSessionId String?
+  paidAt        DateTime             @default(now())
+  clinic        Clinic               @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  settlement    CommissionSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  paidBy        User                 @relation("CommissionPayoutPayer", fields: [paidByUserId], references: [id], onDelete: Restrict)
+  cashSession   CashSession?         @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  service       Service?             @relation(fields: [serviceId], references: [id])
+  serviceId     String?
+
+  @@index([clinicId, paidAt])
+  @@index([settlementId, paidAt])
+  @@index([cashSessionId, paidAt])
 }
 
 model WarrantyTemplate {
@@ -557,50 +650,52 @@ model ApprovalRequest {
 }
 
 model CashSession {
-  id              String                @id @default(cuid())
-  clinicId        String
-  openedByUserId  String
-  closedByUserId  String?
-  openingBalance  Decimal               @default(0) @db.Decimal(14, 2)
-  expectedBalance Decimal?              @db.Decimal(14, 2)
-  countedBalance  Decimal?              @db.Decimal(14, 2)
-  status          String                @default("OPEN")
-  openNote        String?
-  closeNote       String?
-  openedAt        DateTime              @default(now())
-  closedAt        DateTime?
-  clinic          Clinic                @relation(fields: [clinicId], references: [id], onDelete: Restrict)
-  openedBy        User                  @relation("CashSessionOpener", fields: [openedByUserId], references: [id], onDelete: Restrict)
-  closedBy        User?                 @relation("CashSessionCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
-  accountEntries  PatientAccountEntry[]
+  id                String                @id @default(cuid())
+  clinicId          String
+  openedByUserId    String
+  closedByUserId    String?
+  openingBalance    Decimal               @default(0) @db.Decimal(14, 2)
+  expectedBalance   Decimal?              @db.Decimal(14, 2)
+  countedBalance    Decimal?              @db.Decimal(14, 2)
+  status            String                @default("OPEN")
+  openNote          String?
+  closeNote         String?
+  openedAt          DateTime              @default(now())
+  closedAt          DateTime?
+  clinic            Clinic                @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  openedBy          User                  @relation("CashSessionOpener", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  closedBy          User?                 @relation("CashSessionCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  accountEntries    PatientAccountEntry[]
+  commissionPayouts CommissionPayout[]
 
   @@index([clinicId, status, openedAt])
 }
 
 model PatientAccountEntry {
-  id                String                     @id @default(cuid())
-  clinicId          String
-  patientId         String
-  entryType         String
-  direction         String
-  amount            Decimal                    @db.Decimal(14, 2)
-  paymentMethod     String?
-  referenceType     String?
-  referenceId       String?
-  serviceId         String?
-  description       String
-  receiptNumber     String?
-  cashSessionId     String?
-  createdByUserId   String
-  createdAt         DateTime                   @default(now())
-  clinic            Clinic                     @relation(fields: [clinicId], references: [id], onDelete: Restrict)
-  patient           PatientProfile             @relation(fields: [patientId], references: [id], onDelete: Restrict)
-  service           Service?                   @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  cashSession       CashSession?               @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
-  createdBy         User                       @relation("AccountEntryAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  debitAllocations  PatientAccountAllocation[] @relation("AllocationDebit")
-  creditAllocations PatientAccountAllocation[] @relation("AllocationCredit")
-  treatmentPlanItem TreatmentPlanItem?
+  id                  String                             @id @default(cuid())
+  clinicId            String
+  patientId           String
+  entryType           String
+  direction           String
+  amount              Decimal                            @db.Decimal(14, 2)
+  paymentMethod       String?
+  referenceType       String?
+  referenceId         String?
+  serviceId           String?
+  description         String
+  receiptNumber       String?
+  cashSessionId       String?
+  createdByUserId     String
+  createdAt           DateTime                           @default(now())
+  clinic              Clinic                             @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient             PatientProfile                     @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  service             Service?                           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  cashSession         CashSession?                       @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  createdBy           User                               @relation("AccountEntryAuthor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  debitAllocations    PatientAccountAllocation[]         @relation("AllocationDebit")
+  creditAllocations   PatientAccountAllocation[]         @relation("AllocationCredit")
+  allocationReversals PatientAccountAllocationReversal[] @relation("AllocationRefundEntry")
+  treatmentPlanItem   TreatmentPlanItem?
 
   @@index([clinicId, patientId, createdAt])
   @@index([clinicId, cashSessionId, createdAt])
@@ -608,19 +703,36 @@ model PatientAccountEntry {
 }
 
 model PatientAccountAllocation {
-  id            String              @id @default(cuid())
+  id            String                             @id @default(cuid())
   clinicId      String
   debitEntryId  String
   creditEntryId String
-  amount        Decimal             @db.Decimal(14, 2)
-  createdAt     DateTime            @default(now())
-  clinic        Clinic              @relation(fields: [clinicId], references: [id], onDelete: Restrict)
-  debitEntry    PatientAccountEntry @relation("AllocationDebit", fields: [debitEntryId], references: [id], onDelete: Restrict)
-  creditEntry   PatientAccountEntry @relation("AllocationCredit", fields: [creditEntryId], references: [id], onDelete: Restrict)
+  amount        Decimal                            @db.Decimal(14, 2)
+  createdAt     DateTime                           @default(now())
+  clinic        Clinic                             @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  debitEntry    PatientAccountEntry                @relation("AllocationDebit", fields: [debitEntryId], references: [id], onDelete: Restrict)
+  creditEntry   PatientAccountEntry                @relation("AllocationCredit", fields: [creditEntryId], references: [id], onDelete: Restrict)
+  reversals     PatientAccountAllocationReversal[]
 
   @@unique([debitEntryId, creditEntryId])
   @@index([clinicId, debitEntryId])
   @@index([clinicId, creditEntryId])
+}
+
+model PatientAccountAllocationReversal {
+  id            String                   @id @default(cuid())
+  clinicId      String
+  allocationId  String
+  refundEntryId String
+  amount        Decimal                  @db.Decimal(14, 2)
+  createdAt     DateTime                 @default(now())
+  clinic        Clinic                   @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  allocation    PatientAccountAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  refundEntry   PatientAccountEntry      @relation("AllocationRefundEntry", fields: [refundEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([allocationId, refundEntryId])
+  @@index([clinicId, refundEntryId])
+  @@index([clinicId, allocationId])
 }
 
 model AuditLog {
