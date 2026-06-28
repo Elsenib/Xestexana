@@ -13,6 +13,7 @@ import {
   auditRequestMeta,
   recordAudit,
 } from "../services/audit-service.js";
+import { createUserNotification } from "../services/user-notification-service.js";
 
 const staffRoles = [
   "SUPER_ADMIN",
@@ -121,6 +122,16 @@ export async function approvalRoutes(app: FastifyInstance) {
                 },
                 include: approvalInclude,
               });
+              await createUserNotification(tx, {
+                clinicId: approval.clinicId,
+                recipientUserId: approval.requestedByUserId,
+                type: "APPROVAL_REVIEWED",
+                title: "Təsdiq sorğusu cavablandırıldı",
+                message: `${approval.actionType} · rədd edildi`,
+                href: "/approvals",
+                entityType: "ApprovalRequest",
+                entityId: approval.id,
+              });
               return { kind: "rejected" as const, approval: rejected };
             }
 
@@ -143,6 +154,16 @@ export async function approvalRoutes(app: FastifyInstance) {
                 appliedAt: new Date(),
               },
               include: approvalInclude,
+            });
+            await createUserNotification(tx, {
+              clinicId: approval.clinicId,
+              recipientUserId: approval.requestedByUserId,
+              type: "APPROVAL_REVIEWED",
+              title: "Təsdiq sorğusu cavablandırıldı",
+              message: `${approval.actionType} · təsdiq edildi`,
+              href: "/approvals",
+              entityType: "ApprovalRequest",
+              entityId: approval.id,
             });
             return { kind: "approved" as const, approval: approved };
           },

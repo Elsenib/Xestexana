@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
+import { normalizePhone } from "../services/phone-utils.js";
 
 const crmRoles = ["SUPER_ADMIN", "ADMIN", "CALL_CENTER"] as const;
 const taskStatusSchema = z.enum(["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
@@ -279,6 +280,7 @@ export async function crmRoutes(app: FastifyInstance) {
             firstName,
             lastName,
             phone: lead.phone,
+            phoneNormalized: normalizePhone(lead.phone),
             gender: body.gender,
             birthDate: body.birthDate ? new Date(body.birthDate) : new Date("1990-01-01T00:00:00.000Z"),
           },

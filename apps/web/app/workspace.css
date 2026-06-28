@@ -329,6 +329,133 @@
   background: var(--ws-teal-soft);
   color: var(--ws-teal);
 }
+.ws-notification-center {
+  position: relative;
+}
+.ws-notification-trigger {
+  position: relative;
+}
+.ws-notification-trigger > em {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #c45248;
+  color: #fff;
+  font: 700 9px var(--font-sans), sans-serif;
+  font-style: normal;
+  display: grid;
+  place-items: center;
+}
+.ws-notification-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 100px));
+  overflow: hidden;
+  z-index: 120;
+  border: 1px solid var(--ws-line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgba(20, 34, 30, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-5px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms ease;
+}
+.ws-notification-center.open .ws-notification-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.ws-notification-menu > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--ws-line);
+}
+.ws-notification-menu > header div {
+  display: flex;
+  flex-direction: column;
+}
+.ws-notification-menu > header b {
+  font-size: 14px;
+}
+.ws-notification-menu > header span,
+.ws-notification-menu > header button {
+  color: var(--ws-muted);
+  font-size: 10px;
+}
+.ws-notification-menu > header button {
+  border: 0;
+  background: transparent;
+  color: var(--ws-teal);
+  cursor: pointer;
+}
+.ws-notification-menu > div {
+  max-height: 450px;
+  overflow: auto;
+}
+.ws-notification-menu > div > button {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #edf1ef;
+  background: #fff;
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: 7px 1fr;
+  gap: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.ws-notification-menu > div > button:hover {
+  background: #f7faf9;
+}
+.ws-notification-menu > div > button.unread {
+  background: #f0f8f5;
+}
+.ws-notification-menu > div > button > i {
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: transparent;
+}
+.ws-notification-menu > div > button.unread > i {
+  background: var(--ws-teal);
+}
+.ws-notification-menu > div > button > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ws-notification-menu > div > button b {
+  font-size: 12px;
+}
+.ws-notification-menu > div > button small,
+.ws-notification-menu > div > button time {
+  color: var(--ws-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.ws-notification-menu > div > button time {
+  font-size: 9px;
+}
+.ws-notification-menu > div > p {
+  margin: 0;
+  padding: 28px 18px;
+  text-align: center;
+  color: var(--ws-muted);
+  font-size: 11px;
+}
 .ws-status-dot {
   display: inline-block;
   width: 7px;

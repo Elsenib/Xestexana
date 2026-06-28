@@ -18,6 +18,7 @@ export type NavIconId =
   | "reports"
   | "administration"
   | "approvals"
+  | "notifications"
   | "logout";
 
 type NavIconProps = {
@@ -131,6 +132,12 @@ const paths: Record<NavIconId, ReactNode> = {
     <>
       <path d="M5 12.5 9.5 17 19 7" />
       <rect x="3" y="3" width="18" height="18" rx="4" />
+    </>
+  ),
+  notifications: (
+    <>
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
+      <path d="M10 21h4" />
     </>
   ),
   logout: (

@@ -52,7 +52,7 @@ export default function TreatmentsPage() {
   }
   async function changeStatus(id: string, status: string) {
     setError(""); setNotice("");
-    try { await apiRequest(`/treatment-plans/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }); setNotice("Plan statusu yeniləndi."); await load(); }
+    try { const result = await apiRequest<{ message?: string }>(`/treatment-plans/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }); setNotice(result.message ?? "Plan statusu yeniləndi."); await load(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Status dəyişmədi."); }
   }
 

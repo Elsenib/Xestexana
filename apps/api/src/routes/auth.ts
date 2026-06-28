@@ -11,6 +11,7 @@ import {
   auditRequestMeta,
   recordAudit,
 } from "../services/audit-service.js";
+import { normalizePhone } from "../services/phone-utils.js";
 
 const registerPatientWithClinicSchema = z.object({
   clinicId: z.string().min(1),
@@ -89,6 +90,7 @@ export async function authRoutes(app: FastifyInstance) {
           firstName: body.firstName,
           lastName: body.lastName,
           phone: body.phone,
+          phoneNormalized: normalizePhone(body.phone),
           gender: body.gender,
           birthDate: new Date(body.birthDate),
           bloodType: body.bloodType,

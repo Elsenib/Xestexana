@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { createUserNotification } from "../services/user-notification-service.js";
 
 const taskStatusSchema = z.enum(["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
 const taskPrioritySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
@@ -150,18 +151,31 @@ export async function taskRoutes(app: FastifyInstance) {
         return reply.code(400).send({ message: "Məsul işçi tapılmadı və ya aktiv deyil." });
       }
 
-      const task = await app.prisma.task.create({
-        data: {
+      const task = await app.prisma.$transaction(async (tx) => {
+        const created = await tx.task.create({
+          data: {
+            clinicId,
+            title: body.title,
+            description: body.description,
+            assigneeUserId: body.assigneeUserId,
+            createdByUserId: creatorId,
+            dueDate,
+            priority: body.priority,
+            status: "PENDING",
+            active: true
+          }
+        });
+        await createUserNotification(tx, {
           clinicId,
-          title: body.title,
-          description: body.description,
-          assigneeUserId: body.assigneeUserId,
-          createdByUserId: creatorId,
-          dueDate,
-          priority: body.priority,
-          status: "PENDING",
-          active: true
-        }
+          recipientUserId: body.assigneeUserId,
+          type: "TASK_ASSIGNED",
+          title: "Yeni tapşırıq",
+          message: `${body.title} · son tarix ${dueDate.toLocaleString("az-AZ")}`,
+          href: "/tasks",
+          entityType: "Task",
+          entityId: created.id,
+        });
+        return created;
       });
 
       return reply.code(201).send({ id: task.id });
@@ -193,19 +207,34 @@ export async function taskRoutes(app: FastifyInstance) {
       }
 
       const now = new Date();
-      const updated = await app.prisma.task.update({
-        where: { id: task.id },
-        data: {
-          status: body.status,
-          completedAt: body.status === "COMPLETED" ? now : null,
-          cancelledAt: body.status === "CANCELLED" ? now : null
-        },
-        select: {
-          id: true,
-          status: true,
-          completedAt: true,
-          cancelledAt: true
+      const updated = await app.prisma.$transaction(async (tx) => {
+        const value = await tx.task.update({
+          where: { id: task.id },
+          data: {
+            status: body.status,
+            completedAt: body.status === "COMPLETED" ? now : null,
+            cancelledAt: body.status === "CANCELLED" ? now : null
+          },
+          select: {
+            id: true,
+            status: true,
+            completedAt: true,
+            cancelledAt: true
+          }
+        });
+        if (task.createdByUserId !== userId && task.status !== body.status) {
+          await createUserNotification(tx, {
+            clinicId,
+            recipientUserId: task.createdByUserId,
+            type: "TASK_STATUS_CHANGED",
+            title: "Tapşırıq statusu dəyişdi",
+            message: `${task.title} · ${body.status}`,
+            href: "/tasks",
+            entityType: "Task",
+            entityId: task.id,
+          });
         }
+        return value;
       });
 
       return {

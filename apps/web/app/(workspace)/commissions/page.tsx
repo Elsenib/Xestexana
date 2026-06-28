@@ -22,13 +22,14 @@ type CommissionEntry = {
   amount: number;
   paidBaseAmount: number;
   earnedAmount: number;
+  clinicShareAmount: number;
   status: string;
   sourceType: string;
   note: string | null;
   createdAt: string;
 };
 type Summary = {
-  totals: { pending: number; earned: number; entries: number; activeRules: number };
+  totals: { pending: number; earned: number; clinicShare: number; entries: number; activeRules: number };
   rules: CommissionRule[];
   entries: CommissionEntry[];
 };
@@ -172,10 +173,10 @@ export default function CommissionsPage() {
     <div className="ws-stack">
       <section className="ws-page-head">
         <div>
-          <p className="ws-eyebrow">Avtomatik maliyyə · Həkim faizi</p>
-          <h1>Həkim komissiyaları</h1>
+          <p className="ws-eyebrow">Avtomatik maliyyə · Gəlir bölgüsü</p>
+          <h1>Həkim–klinika gəlir bölgüsü</h1>
           <span>
-            Tamamlanan xidmət komissiyanı yaradır; pasiyent ödənişi borca bölüşdükcə qazanılmış həkim payı avtomatik artır.
+            Həkim maaş almır: görülən xidmətin ödənmiş hissəsi qaydaya əsasən həkim və klinika arasında bölünür. Məsələn 50% / 50%.
           </span>
         </div>
       </section>
@@ -195,9 +196,9 @@ export default function CommissionsPage() {
           <small>Ödənmiş xidmət hissəsinə görə</small>
         </article>
         <article>
-          <span>Aktiv qayda / sətir</span>
-          <strong>{summary?.totals.activeRules ?? 0}</strong>
-          <small>{summary?.totals.entries ?? 0} komissiya sətri</small>
+          <span>Klinikanın payı</span>
+          <strong>{money(summary?.totals.clinicShare ?? 0)}</strong>
+          <small>Ödənmiş xidmətlərdən qalan pay</small>
         </article>
       </section>
 
@@ -206,7 +207,7 @@ export default function CommissionsPage() {
           <header>
             <div>
               <p className="ws-eyebrow">Qayda</p>
-              <h2>Həkim faizi təyin et</h2>
+              <h2>Gəlir bölgüsü təyin et</h2>
             </div>
           </header>
           <div className="ws-form-grid">
@@ -231,7 +232,7 @@ export default function CommissionsPage() {
               </select>
             </label>
             <label>
-              Faiz
+              Həkimin payı (%)
               <input
                 type="number"
                 min="0"
@@ -240,6 +241,7 @@ export default function CommissionsPage() {
                 value={ruleForm.percent}
                 onChange={(e) => setRuleForm((v) => ({ ...v, percent: e.target.value }))}
               />
+              <small>Klinikanın payı avtomatik: {100 - Number(ruleForm.percent || 0)}%</small>
             </label>
             <footer>
               <button className="ws-button ws-button--primary" disabled={saving}>
@@ -264,7 +266,7 @@ export default function CommissionsPage() {
               <div className="ws-flow-card" key={rule.id}>
                 <div>
                   <strong>{rule.doctorName}</strong>
-                  <span>{rule.serviceName} · {rule.percent}%</span>
+                  <span>{rule.serviceName} · həkim {rule.percent}% / klinika {100 - rule.percent}%</span>
                 </div>
                 <button className="ws-row-action" type="button" onClick={() => toggleRule(rule)}>
                   {rule.active ? "Deaktiv et" : "Aktiv et"}
@@ -286,7 +288,7 @@ export default function CommissionsPage() {
             {(summary?.entries ?? []).map((entry) => (
               <div className="ws-flow-card" key={entry.id}>
                 <div>
-                  <strong>{entry.doctorName} · {money(entry.earnedAmount)}</strong>
+                  <strong>{entry.doctorName} · həkim {money(entry.earnedAmount)} / klinika {money(entry.clinicShareAmount)}</strong>
                   <span>
                     Ödənən baza {money(entry.paidBaseAmount)} / {money(entry.baseAmount)} · {entry.percent}% · {entry.status}
                     {entry.note ? ` · ${entry.note}` : ""}

@@ -5,6 +5,7 @@ import {
   APPROVAL_ACTIONS,
   approvalStatusMessage,
   createApprovalRequest,
+  needsApproval,
   shouldAutoApply,
 } from "../services/approval-service.js";
 import {
@@ -192,6 +193,38 @@ export async function treatmentPlanRoutes(app: FastifyInstance) {
     if (!plan) return reply.code(404).send({ message: "Müalicə planı tapılmadı." });
     const allowed: Record<string, string[]> = { DRAFT: ["PRESENTED", "CANCELED"], PRESENTED: ["ACCEPTED", "PARTIALLY_ACCEPTED", "CANCELED"], ACCEPTED: ["IN_PROGRESS", "CANCELED"], PARTIALLY_ACCEPTED: ["IN_PROGRESS", "CANCELED"], IN_PROGRESS: ["CANCELED"], COMPLETED: [], CANCELED: [] };
     if (!allowed[plan.status]?.includes(status)) return reply.code(409).send({ message: `${plan.status} statusundan ${status} statusuna keçmək olmaz.` });
+    if (status === "PRESENTED") {
+      const version = await app.prisma.treatmentPlanVersion.findFirst({
+        where: { treatmentPlanId: plan.id, version: plan.currentVersion },
+        select: { discount: true },
+      });
+      const discount = version?.discount.toNumber() ?? 0;
+      if (discount > 0 && needsApproval(request.user.role, APPROVAL_ACTIONS.TREATMENT_PLAN_DISCOUNT)) {
+        const pending = await app.prisma.approvalRequest.findFirst({
+          where: {
+            clinicId: request.user.clinicId,
+            actionType: APPROVAL_ACTIONS.TREATMENT_PLAN_DISCOUNT,
+            entityId: plan.id,
+            status: "PENDING",
+          },
+          select: { id: true, reviewerRole: true, reviewerUserId: true, status: true },
+        });
+        const approval = pending ?? await createApprovalRequest(app.prisma, {
+          clinicId: request.user.clinicId,
+          requestedByUserId: request.user.sub!,
+          requesterRole: request.user.role,
+          actionType: APPROVAL_ACTIONS.TREATMENT_PLAN_DISCOUNT,
+          entityType: "TreatmentPlan",
+          entityId: plan.id,
+          payload: { planId: plan.id, targetStatus: "PRESENTED", discount },
+        });
+        return reply.code(202).send({
+          approvalId: approval.id,
+          status: approval.status,
+          message: approvalStatusMessage(approval.reviewerRole, approval.reviewerUserId),
+        });
+      }
+    }
     return app.prisma.treatmentPlan.update({ where: { id }, data: { status } });
   });
 

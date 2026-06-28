@@ -51,6 +51,9 @@ model Clinic {
   patientFiles               PatientFile[]
   financePeriods             FinancePeriod[]
   notificationJobs           NotificationJob[]
+  userNotifications          UserNotification[]
+  whatsappConversations      WhatsAppConversation[]
+  whatsappMessages           WhatsAppMessage[]
   leads                      Lead[]
   crmActivities              CRMActivity[]
   commissionRules            CommissionRule[]
@@ -109,6 +112,9 @@ model User {
   completedTreatmentItems TreatmentPlanItem[]         @relation("TreatmentItemCompleter")
   issuedWarranties        PatientWarranty[]           @relation("WarrantyIssuer")
   createdBackupJobs       BackupJob[]                 @relation("BackupCreator")
+  notifications           UserNotification[]          @relation("NotificationRecipient")
+  assignedWhatsAppChats   WhatsAppConversation[]      @relation("WhatsAppAssignee")
+  sentWhatsAppMessages    WhatsAppMessage[]           @relation("WhatsAppSender")
 
   @@index([clinicId, role])
 }
@@ -138,35 +144,38 @@ model Task {
 }
 
 model PatientProfile {
-  id                  String                    @id @default(cuid())
-  userId              String                    @unique
-  clinicId            String
-  identityNumber      String
-  firstName           String
-  lastName            String
-  phone               String
-  gender              String
-  birthDate           DateTime
-  bloodType           String?
-  allergies           String?
-  chronicConditions   String?
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  clinic              Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  appointments        Appointment[]
-  medicalRecords      MedicalRecord[]
-  anamnesisVersions   PatientAnamnesisVersion[]
-  odontogramSnapshots OdontogramSnapshot[]
-  clinicalEncounters  ClinicalEncounter[]
-  treatmentPlans      TreatmentPlan[]
-  accountEntries      PatientAccountEntry[]
-  files               PatientFile[]
-  commissionEntries   CommissionEntry[]
-  warranties          PatientWarranty[]
+  id                   String                    @id @default(cuid())
+  userId               String                    @unique
+  clinicId             String
+  identityNumber       String
+  firstName            String
+  lastName             String
+  phone                String
+  phoneNormalized      String?
+  gender               String
+  birthDate            DateTime
+  bloodType            String?
+  allergies            String?
+  chronicConditions    String?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  clinic               Clinic                    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments         Appointment[]
+  medicalRecords       MedicalRecord[]
+  anamnesisVersions    PatientAnamnesisVersion[]
+  odontogramSnapshots  OdontogramSnapshot[]
+  clinicalEncounters   ClinicalEncounter[]
+  treatmentPlans       TreatmentPlan[]
+  accountEntries       PatientAccountEntry[]
+  files                PatientFile[]
+  commissionEntries    CommissionEntry[]
+  warranties           PatientWarranty[]
+  whatsappConversation WhatsAppConversation?
 
   @@unique([clinicId, identityNumber])
   @@index([clinicId, lastName, firstName])
+  @@index([clinicId, phoneNormalized])
 }
 
 model DoctorProfile {
@@ -376,21 +385,20 @@ model StockMovement {
 }
 
 model Service {
-  id                String                @id @default(cuid())
-  clinicId          String
-  code              String
-  name              String
-  category          String
-  price             Decimal               @db.Decimal(14, 2)
-  durationMinutes   Int                   @default(30)
-  active            Boolean               @default(true)
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  clinic            Clinic                @relation(fields: [clinicId], references: [id], onDelete: Restrict)
-  treatmentItems    TreatmentPlanItem[]
-  accountEntries    PatientAccountEntry[]
-  commissionPayouts CommissionPayout[]
-  commissionRules   CommissionRule[]
+  id              String                @id @default(cuid())
+  clinicId        String
+  code            String
+  name            String
+  category        String
+  price           Decimal               @db.Decimal(14, 2)
+  durationMinutes Int                   @default(30)
+  active          Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  clinic          Clinic                @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  treatmentItems  TreatmentPlanItem[]
+  accountEntries  PatientAccountEntry[]
+  commissionRules CommissionRule[]
 
   @@unique([clinicId, code])
   @@index([clinicId, active, category])
@@ -575,8 +583,6 @@ model CommissionPayout {
   settlement    CommissionSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
   paidBy        User                 @relation("CommissionPayoutPayer", fields: [paidByUserId], references: [id], onDelete: Restrict)
   cashSession   CashSession?         @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
-  service       Service?             @relation(fields: [serviceId], references: [id])
-  serviceId     String?
 
   @@index([clinicId, paidAt])
   @@index([settlementId, paidAt])
@@ -808,6 +814,66 @@ model NotificationJob {
   clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Restrict)
 
   @@index([clinicId, status, scheduledAt])
+}
+
+model UserNotification {
+  id              String    @id @default(cuid())
+  clinicId        String
+  recipientUserId String
+  type            String
+  title           String
+  message         String
+  href            String?
+  entityType      String?
+  entityId        String?
+  readAt          DateTime?
+  createdAt       DateTime  @default(now())
+  clinic          Clinic    @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  recipient       User      @relation("NotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Restrict)
+
+  @@index([recipientUserId, readAt, createdAt])
+  @@index([clinicId, type, createdAt])
+}
+
+model WhatsAppConversation {
+  id             String            @id @default(cuid())
+  clinicId       String
+  patientId      String            @unique
+  assignedUserId String?
+  phone          String
+  lastMessageAt  DateTime?
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  clinic         Clinic            @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  patient        PatientProfile    @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  assignedUser   User?             @relation("WhatsAppAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  messages       WhatsAppMessage[]
+
+  @@index([clinicId, lastMessageAt])
+  @@index([clinicId, assignedUserId, lastInboundAt])
+  @@index([clinicId, phone])
+}
+
+model WhatsAppMessage {
+  id                String               @id @default(cuid())
+  clinicId          String
+  conversationId    String
+  sentByUserId      String?
+  providerMessageId String?              @unique
+  direction         String
+  messageType       String               @default("TEXT")
+  body              String?
+  status            String               @default("RECEIVED")
+  occurredAt        DateTime
+  createdAt         DateTime             @default(now())
+  clinic            Clinic               @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  conversation      WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  sentBy            User?                @relation("WhatsAppSender", fields: [sentByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clinicId, conversationId, occurredAt])
+  @@index([clinicId, direction, occurredAt])
 }
 
 model BackupJob {

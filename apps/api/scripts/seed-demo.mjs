@@ -51,8 +51,8 @@ async function main() {
   });
   const patient = await prisma.patientProfile.upsert({
     where: { userId: patientUser.id },
-    update: { clinicId: clinic.id, identityNumber: "AA1234567", firstName: "Aysel", lastName: "Məmmədova", phone: "+994501112233", gender: "FEMALE", birthDate: new Date("1995-04-12T00:00:00.000Z") },
-    create: { userId: patientUser.id, clinicId: clinic.id, identityNumber: "AA1234567", firstName: "Aysel", lastName: "Məmmədova", phone: "+994501112233", gender: "FEMALE", birthDate: new Date("1995-04-12T00:00:00.000Z") }
+    update: { clinicId: clinic.id, identityNumber: "AA1234567", firstName: "Aysel", lastName: "Məmmədova", phone: "+994501112233", phoneNormalized: "994501112233", gender: "FEMALE", birthDate: new Date("1995-04-12T00:00:00.000Z") },
+    create: { userId: patientUser.id, clinicId: clinic.id, identityNumber: "AA1234567", firstName: "Aysel", lastName: "Məmmədova", phone: "+994501112233", phoneNormalized: "994501112233", gender: "FEMALE", birthDate: new Date("1995-04-12T00:00:00.000Z") }
   });
   const startsAt = new Date(); startsAt.setDate(startsAt.getDate() + 1); startsAt.setHours(10, 0, 0, 0);
   await prisma.appointment.upsert({

@@ -20,6 +20,16 @@ import {
   type WorkspaceRoute,
 } from "../../lib/role-access";
 
+type InboxNotification = {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  href: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
 function isNavActive(pathname: string | null, href: WorkspaceRoute) {
   if (!pathname) return false;
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -33,6 +43,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [openGroup, setOpenGroup] = useState<NavigationGroup | null>(null);
+  const [notifications, setNotifications] = useState<InboxNotification[]>([]);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const unreadNotifications = notifications.filter((item) => !item.readAt).length;
 
   useEffect(() => {
     if (!localStorage.getItem(TOKEN_KEY)) {
@@ -88,6 +101,39 @@ export function AppShell({ children }: { children: ReactNode }) {
       .catch(() => setPendingApprovals(0));
   }, [user, visible, pathname]);
 
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      apiRequest<InboxNotification[]>("/notifications/inbox?take=30")
+        .then((rows) => { if (active) setNotifications(rows); })
+        .catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [user, pathname]);
+
+  async function openNotification(item: InboxNotification) {
+    if (!item.readAt) {
+      await apiRequest(`/notifications/${item.id}/read`, { method: "PATCH" }).catch(() => undefined);
+      setNotifications((rows) => rows.map((row) => row.id === item.id ? { ...row, readAt: new Date().toISOString() } : row));
+    }
+    setNotificationOpen(false);
+    if (item.href) router.push(item.href);
+  }
+
+  async function readAllNotifications() {
+    await apiRequest("/notifications/read-all", { method: "POST" });
+    setNotifications((rows) => rows.map((row) => ({ ...row, readAt: row.readAt ?? new Date().toISOString() })));
+  }
+
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     router.replace("/");
@@ -120,6 +166,39 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="ws-status-dot" aria-hidden />
               Aktiv
             </span>
+            <div className={`ws-notification-center ${notificationOpen ? "open" : ""}`}>
+              <button
+                type="button"
+                className="ws-icon-button ws-notification-trigger"
+                onClick={() => setNotificationOpen((value) => !value)}
+                title="Bildirişlər"
+                aria-label={`Bildirişlər${unreadNotifications ? `, ${unreadNotifications} oxunmamış` : ""}`}
+                aria-expanded={notificationOpen}
+              >
+                <NavIcon name="notifications" size={17} />
+                {unreadNotifications > 0 ? <em>{Math.min(unreadNotifications, 99)}</em> : null}
+              </button>
+              <div className="ws-notification-menu">
+                <header>
+                  <div><b>Bildirişlər</b><span>{unreadNotifications} oxunmamış</span></div>
+                  {unreadNotifications > 0 ? <button type="button" onClick={() => void readAllNotifications()}>Hamısını oxu</button> : null}
+                </header>
+                <div>
+                  {notifications.map((item) => (
+                    <button
+                      type="button"
+                      className={item.readAt ? "" : "unread"}
+                      key={item.id}
+                      onClick={() => void openNotification(item)}
+                    >
+                      <i aria-hidden />
+                      <span><b>{item.title}</b><small>{item.message}</small><time>{new Date(item.createdAt).toLocaleString("az-AZ")}</time></span>
+                    </button>
+                  ))}
+                  {!notifications.length ? <p>Yeni bildiriş yoxdur.</p> : null}
+                </div>
+              </div>
+            </div>
             <div className="ws-user-chip">
               <i>{user.email.slice(0, 2).toUpperCase()}</i>
               <div>

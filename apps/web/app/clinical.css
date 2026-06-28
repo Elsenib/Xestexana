@@ -10,7 +10,7 @@
 }
 .pc-head > a {
   grid-column: 1/-1;
-  color: #697572;
+  color: #756969;
   text-decoration: none;
   font-size: 11px;
 }
@@ -54,6 +54,11 @@
 .pc-critical span {
   font-size: 11px;
   color: #703933;
+}
+.pc-contact-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }
 .pc-tabs {
   margin: 0 -42px 28px;
@@ -223,10 +228,22 @@
   color: #76827f;
   cursor: pointer;
 }
-.pc-teeth button span {
-  font-size: 30px;
-  line-height: 1;
+.pc-tooth-icon {
+  width: 32px;
+  height: 44px;
+  overflow: visible;
   color: #aebbb7;
+}
+.pc-tooth-icon path {
+  fill: currentColor;
+  fill-opacity: 0.18;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pc-tooth-icon.upper {
+  transform: rotate(180deg);
 }
 .pc-teeth button b {
   font: 600 9px monospace;
@@ -237,10 +254,10 @@
   background: #e8f1ee;
   border-color: #78a69c;
 }
-.pc-teeth button.marked span {
+.pc-teeth button.marked .pc-tooth-icon {
   color: #cc685d;
 }
-.pc-teeth button.marked.planned span {
+.pc-teeth button.marked.planned .pc-tooth-icon {
   color: #bf8b45;
 }
 .pc-condition {
@@ -300,6 +317,62 @@
 .pc-legend i:nth-child(2) {
   background: #bf8b45;
 }
+.pc-whatsapp {
+  max-width: 980px;
+  margin: 0 auto;
+}
+.pc-chat-list {
+  min-height: 260px;
+  max-height: 520px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #e3e9e6;
+  border-radius: 16px;
+  background: #f5f8f6;
+}
+.pc-chat-list article {
+  max-width: min(72%, 620px);
+  padding: 10px 13px;
+  border: 1px solid #dfe6e3;
+  border-radius: 14px 14px 14px 4px;
+  background: #fff;
+}
+.pc-chat-list article.outbound {
+  align-self: flex-end;
+  border-color: #cce1da;
+  border-radius: 14px 14px 4px 14px;
+  background: #eaf5f1;
+}
+.pc-chat-list article b,
+.pc-chat-list article time {
+  display: block;
+  color: #71807b;
+  font-size: 9px;
+}
+.pc-chat-list article p {
+  margin: 4px 0;
+  color: #26332f;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.pc-chat-compose {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-top: 12px;
+}
+.pc-chat-compose textarea {
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid #d8dfdc;
+  border-radius: 12px;
+  font: 12px inherit;
+  resize: vertical;
+}
 @media (max-width: 900px) {
   .pc-head {
     margin: -28px -20px 0;
@@ -322,10 +395,20 @@
   .pc-critical {
     grid-column: 1/-1;
   }
+  .pc-contact-actions {
+    grid-column: 1/-1;
+    justify-content: flex-start;
+  }
   .pc-condition {
     grid-template-columns: 1fr;
   }
   .pc-condition > div:first-child {
     border-right: 0;
+  }
+  .pc-chat-compose {
+    grid-template-columns: 1fr;
+  }
+  .pc-chat-list article {
+    max-width: 88%;
   }
 }

@@ -3,6 +3,7 @@ export const approvalActionLabels: Record<string, string> = {
   CLINICAL_ENCOUNTER_COMPLETE: "Klinik qəbulun tamamlanması",
   SERVICE_UPSERT: "Xidmət kataloqu dəyişikliyi",
   FINANCE_REFUND: "Ödəniş refund sorğusu",
+  TREATMENT_PLAN_DISCOUNT: "Müalicə planı endirimi",
 };
 
 export const stockMovementLabels: Record<string, string> = {
@@ -60,6 +61,9 @@ export function describeApproval(row: ApprovalRow, productName?: string) {
     const amount = Number(row.payload.amount ?? 0).toFixed(2);
     const description = String(row.payload.description ?? "Refund");
     return `${description} · ${amount} ₼ · qəbz ${String(row.payload.referencePaymentId ?? "—")}`;
+  }
+  if (row.actionType === "TREATMENT_PLAN_DISCOUNT") {
+    return `Müalicə planı endirimi · ${Number(row.payload.discount ?? 0).toFixed(2)} ₼`;
   }
   return row.actionType;
 }

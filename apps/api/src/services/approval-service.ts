@@ -8,12 +8,14 @@ import {
   type ChargeLineInput,
 } from "./finance-service.js";
 import { AUDIT_ACTIONS, AUDIT_CATEGORIES, recordAudit } from "./audit-service.js";
+import { createUserNotification, notifyUsersByRole } from "./user-notification-service.js";
 
 export const APPROVAL_ACTIONS = {
   STOCK_MOVEMENT: "STOCK_MOVEMENT",
   CLINICAL_ENCOUNTER_COMPLETE: "CLINICAL_ENCOUNTER_COMPLETE",
   SERVICE_UPSERT: "SERVICE_UPSERT",
   FINANCE_REFUND: "FINANCE_REFUND",
+  TREATMENT_PLAN_DISCOUNT: "TREATMENT_PLAN_DISCOUNT",
 } as const;
 
 export type ApprovalActionType = (typeof APPROVAL_ACTIONS)[keyof typeof APPROVAL_ACTIONS];
@@ -64,6 +66,11 @@ const financeRefundPayloadSchema = z.object({
   description: z.string().min(2).max(500),
   referencePaymentId: z.string().min(1),
 });
+const treatmentPlanDiscountPayloadSchema = z.object({
+  planId: z.string().min(1),
+  targetStatus: z.literal("PRESENTED"),
+  discount: z.coerce.number().positive(),
+});
 
 function signedStock(type: string, quantity: Prisma.Decimal) {
   return (STOCK_INCOMING.has(type) ? 1 : -1) * quantity.toNumber();
@@ -93,6 +100,10 @@ export function resolveReviewer(
   }
 
   if (actionType === APPROVAL_ACTIONS.FINANCE_REFUND) {
+    return { reviewerRole: "SUPER_ADMIN", reviewerUserId: null };
+  }
+
+  if (actionType === APPROVAL_ACTIONS.TREATMENT_PLAN_DISCOUNT) {
     return { reviewerRole: "SUPER_ADMIN", reviewerUserId: null };
   }
 
@@ -273,6 +284,23 @@ export async function applyApprovedAction(
     }
   }
 
+
+  if (approval.actionType === APPROVAL_ACTIONS.TREATMENT_PLAN_DISCOUNT) {
+    const payload = treatmentPlanDiscountPayloadSchema.parse(approval.payload);
+    const plan = await tx.treatmentPlan.findFirst({
+      where: { id: payload.planId, clinicId: approval.clinicId },
+    });
+    if (!plan) return { error: "ENTITY_NOT_FOUND" };
+    if (plan.status !== "DRAFT") return { error: "UNSUPPORTED" };
+    const version = await tx.treatmentPlanVersion.findFirst({
+      where: { treatmentPlanId: plan.id, version: plan.currentVersion },
+      select: { discount: true },
+    });
+    if (!version || version.discount.toNumber() <= 0) return { error: "UNSUPPORTED" };
+    await tx.treatmentPlan.update({ where: { id: plan.id }, data: { status: payload.targetStatus } });
+    return {};
+  }
+
   return { error: "UNSUPPORTED" };
 }
 
@@ -329,6 +357,28 @@ export async function createApprovalRequest(
         reviewerRole: reviewer.reviewerRole,
       },
     });
+
+    const notification = {
+      clinicId: input.clinicId,
+      type: "APPROVAL_REQUESTED",
+      title: "Yeni təsdiq sorğusu",
+      message: `${input.actionType} əməliyyatı təsdiq gözləyir.`,
+      href: "/approvals",
+      entityType: "ApprovalRequest",
+      entityId: approval.id,
+    };
+    if (reviewer.reviewerUserId) {
+      await createUserNotification(tx, {
+        ...notification,
+        recipientUserId: reviewer.reviewerUserId,
+      });
+    } else {
+      await notifyUsersByRole(tx, {
+        ...notification,
+        roles: [reviewer.reviewerRole],
+        excludeUserId: input.requestedByUserId,
+      });
+    }
 
     return approval;
   });

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { normalizePhone } from "../services/phone-utils.js";
 
 function mapAppointment(row: {
   id: string;
@@ -217,6 +218,7 @@ export async function patientRoutes(app: FastifyInstance) {
             firstName: body.firstName,
             lastName: body.lastName,
             phone: body.phone,
+            phoneNormalized: normalizePhone(body.phone),
             gender: body.gender,
             birthDate: new Date(body.birthDate),
             bloodType: body.bloodType,

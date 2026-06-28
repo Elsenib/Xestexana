@@ -1,7 +1,83 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
+const staffRoles = ["SUPER_ADMIN", "ADMIN", "CALL_CENTER", "DOCTOR", "NURSE", "CASHIER", "INVENTORY_MANAGER", "ACCOUNTANT", "MANAGEMENT"] as const;
+
 export async function notificationRoutes(app: FastifyInstance) {
+  app.get(
+    "/notifications/inbox",
+    { preHandler: [app.authenticate, app.authorize([...staffRoles])] },
+    async (request) => {
+      const query = z.object({
+        take: z.coerce.number().int().min(1).max(100).default(30),
+        unreadOnly: z.coerce.boolean().default(false),
+      }).parse(request.query);
+      const rows = await app.prisma.userNotification.findMany({
+        where: {
+          clinicId: request.user.clinicId,
+          recipientUserId: request.user.sub!,
+          ...(query.unreadOnly ? { readAt: null } : {}),
+        },
+        orderBy: { createdAt: "desc" },
+        take: query.take,
+      });
+      return rows.map((row) => ({
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        message: row.message,
+        href: row.href,
+        readAt: row.readAt?.toISOString() ?? null,
+        createdAt: row.createdAt.toISOString(),
+      }));
+    },
+  );
+
+  app.get(
+    "/notifications/summary",
+    { preHandler: [app.authenticate, app.authorize([...staffRoles])] },
+    async (request) => ({
+      unread: await app.prisma.userNotification.count({
+        where: {
+          clinicId: request.user.clinicId,
+          recipientUserId: request.user.sub!,
+          readAt: null,
+        },
+      }),
+    }),
+  );
+
+  app.patch(
+    "/notifications/:id/read",
+    { preHandler: [app.authenticate, app.authorize([...staffRoles])] },
+    async (request, reply) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      const row = await app.prisma.userNotification.findFirst({
+        where: { id, clinicId: request.user.clinicId, recipientUserId: request.user.sub! },
+        select: { id: true, readAt: true },
+      });
+      if (!row) return reply.code(404).send({ message: "Bildiriş tapılmadı." });
+      await app.prisma.userNotification.update({
+        where: { id },
+        data: { readAt: row.readAt ?? new Date() },
+      });
+      return { id, read: true };
+    },
+  );
+
+  app.post(
+    "/notifications/read-all",
+    { preHandler: [app.authenticate, app.authorize([...staffRoles])] },
+    async (request) => app.prisma.userNotification.updateMany({
+      where: {
+        clinicId: request.user.clinicId,
+        recipientUserId: request.user.sub!,
+        readAt: null,
+      },
+      data: { readAt: new Date() },
+    }),
+  );
+
   app.get(
     "/notifications/jobs",
     { preHandler: [app.authenticate, app.authorize(["SUPER_ADMIN", "ADMIN", "CALL_CENTER"])] },

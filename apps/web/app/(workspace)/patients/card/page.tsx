@@ -147,6 +147,30 @@ type PatientFileRow = {
   uploadedBy: string;
 };
 type FilePreview = { url: string; kind: "image" | "pdf" };
+type WhatsAppMessage = {
+  id: string;
+  direction: "INBOUND" | "OUTBOUND";
+  messageType: string;
+  body: string | null;
+  status: string;
+  occurredAt: string;
+};
+
+function ToothIcon({ tooth }: { tooth: string }) {
+  const position = Number(tooth.slice(-1));
+  const kind = position <= 2 ? "incisor" : position === 3 ? "canine" : position <= 5 ? "premolar" : "molar";
+  const paths: Record<string, string> = {
+    incisor: "M10 9Q18 5 26 9l-2 16q-6 5-12 0L10 9Zm4 17 2 20q2 5 4 0l2-20",
+    canine: "M10 13 18 5l8 8-3 14q-5 4-10 0l-3-14Zm4 14 2 20q2 4 4 0l2-20",
+    premolar: "M8 13q4-8 10-2 6-6 10 2l-3 15q-7 5-14 0L8 13Zm5 15 1 18q1 5 4 0V29m0 0v17q3 5 5 0l1-18",
+    molar: "M6 14q3-8 8-3 4-7 8 0 5-5 8 3l-3 16q-9 5-18 0L6 14Zm5 16 1 15q1 5 4 0l2-14m0 0 2 14q3 5 5 0l1-15",
+  };
+  return (
+    <svg className={`pc-tooth-icon ${tooth.startsWith("1") || tooth.startsWith("2") ? "upper" : "lower"}`} viewBox="0 0 36 52" aria-hidden="true">
+      <path d={paths[kind]} />
+    </svg>
+  );
+}
 
 function buildCharges(lines: ChargeLine[], services: Service[]) {
   return lines
@@ -194,7 +218,7 @@ function ClinicalCard() {
   const searchParams = useSearchParams();
   const id = searchParams?.get("id") ?? null;
   const [data, setData] = useState<Summary | null>(null);
-  const [tab, setTab] = useState("summary");
+  const [tab, setTab] = useState(searchParams?.get("tab") ?? "summary");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [savingEncounter, setSavingEncounter] = useState(false);
@@ -222,6 +246,8 @@ function ClinicalCard() {
   const [files, setFiles] = useState<PatientFileRow[]>([]);
   const [filePreviews, setFilePreviews] = useState<Record<string, FilePreview>>({});
   const [uploadCategory, setUploadCategory] = useState("XRAY");
+  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
+  const [whatsappDraft, setWhatsappDraft] = useState("");
   async function load() {
     if (!id) return;
     try {
@@ -272,9 +298,42 @@ function ClinicalCard() {
     setFiles(await apiRequest<PatientFileRow[]>(`/patients/${id}/files`));
   }
 
+  async function loadWhatsApp() {
+    if (!id) return;
+    const result = await apiRequest<{ messages: WhatsAppMessage[] }>(
+      `/communications/whatsapp/conversation?patientId=${encodeURIComponent(id)}`,
+    );
+    setWhatsappMessages(result.messages);
+  }
+
+  async function openWhatsApp(message?: string) {
+    if (!id || !data) return;
+    const text = (message ?? whatsappDraft).trim()
+      || `Salam ${data.firstName}, LovelyDent klinikasından yazırıq.`;
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setError("Brauzer WhatsApp pəncərəsini blokladı.");
+      return;
+    }
+    popup.document.write('<p style="font-family:system-ui;padding:24px">WhatsApp açılır...</p>');
+    try {
+      const result = await apiRequest<{ url: string }>("/communications/whatsapp/open", {
+        method: "POST",
+        body: JSON.stringify({ patientId: id, message: text }),
+      });
+      popup.location.href = result.url;
+      setWhatsappDraft("");
+      await loadWhatsApp();
+    } catch (reason) {
+      popup.close();
+      setError(reason instanceof Error ? reason.message : "WhatsApp açıla bilmədi.");
+    }
+  }
+
   useEffect(() => {
     if (tab === "finance") void loadAccount().catch(() => undefined);
     if (tab === "files") void loadFiles().catch(() => undefined);
+    if (tab === "whatsapp") void loadWhatsApp().catch(() => undefined);
   }, [tab, id]);
 
   useEffect(() => {
@@ -506,6 +565,11 @@ function ClinicalCard() {
             </span>
           </div>
         </div>
+        <div className="pc-contact-actions">
+          <button type="button" className="ws-button ws-button--primary" onClick={() => void openWhatsApp()}>
+            WhatsApp-da yaz
+          </button>
+        </div>
         {latest?.criticalAlert && (
           <div className="pc-critical">
             <b>KRİTİK XƏBƏRDARLIQ</b>
@@ -521,6 +585,7 @@ function ClinicalCard() {
           ["encounters", "Klinik qəbullar"],
           ["finance", "Hesab"],
           ["files", "Fayllar"],
+          ["whatsapp", "WhatsApp"],
         ].map((x) => (
           <button
             className={tab === x[0] ? "active" : ""}
@@ -741,7 +806,7 @@ function ClinicalCard() {
                     onClick={() => setSelected(tooth)}
                     key={tooth}
                   >
-                    <span>♢</span>
+                    <ToothIcon tooth={tooth} />
                     <b>{tooth}</b>
                   </button>
                 ))}
@@ -966,6 +1031,28 @@ function ClinicalCard() {
               <span>Hesab hərəkəti yoxdur.</span>
             </div>
           )}
+        </section>
+      )}
+      {tab === "whatsapp" && (
+        <section className="ws-panel pc-section pc-whatsapp">
+          <header className="ws-registry-tools">
+            <div><p className="ws-eyebrow">Pasiyent əlaqəsi</p><h2>WhatsApp yazışması</h2></div>
+            <button type="button" className="ws-button" onClick={() => void loadWhatsApp()}>Yenilə</button>
+          </header>
+          <div className="pc-chat-list">
+            {whatsappMessages.map((message) => (
+              <article className={message.direction === "OUTBOUND" ? "outbound" : "inbound"} key={message.id}>
+                <b>{message.direction === "OUTBOUND" ? "Klinika" : data.firstName}</b>
+                <p>{message.body || `[${message.messageType}]`}</p>
+                <time>{new Date(message.occurredAt).toLocaleString("az-AZ")}</time>
+              </article>
+            ))}
+            {!whatsappMessages.length ? <div className="ws-empty"><span>WhatsApp yazışması hələ yoxdur.</span></div> : null}
+          </div>
+          <form className="pc-chat-compose" onSubmit={(event) => { event.preventDefault(); void openWhatsApp(); }}>
+            <textarea value={whatsappDraft} onChange={(event) => setWhatsappDraft(event.target.value)} placeholder={`Salam ${data.firstName}...`} />
+            <button className="ws-button ws-button--primary">WhatsApp-da aç</button>
+          </form>
         </section>
       )}
       {tab === "files" && (

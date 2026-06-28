@@ -103,11 +103,13 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       const totalPotential = entries.reduce((sum, entry) => sum + money(entry.amount), 0);
       const totalEarned = entries.reduce((sum, entry) => sum + money(entry.earnedAmount), 0);
+      const totalCollectedBase = entries.reduce((sum, entry) => sum + money(entry.paidBaseAmount), 0);
 
       return {
         totals: {
           pending: roundMoney(totalPotential - totalEarned),
           earned: roundMoney(totalEarned),
+          clinicShare: roundMoney(totalCollectedBase - totalEarned),
           entries: entries.length,
           activeRules: rules.filter((rule) => rule.active).length,
         },
@@ -134,6 +136,7 @@ export async function commissionRoutes(app: FastifyInstance) {
           amount: money(entry.amount),
           paidBaseAmount: money(entry.paidBaseAmount),
           earnedAmount: money(entry.earnedAmount),
+          clinicShareAmount: roundMoney(money(entry.paidBaseAmount) - money(entry.earnedAmount)),
           status: entry.status,
           sourceType: entry.sourceType,
           note: entry.note,

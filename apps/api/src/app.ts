@@ -3,6 +3,7 @@ import fastifyJwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
+import fastifyRawBody from "fastify-raw-body";
 import { ZodError } from "zod";
 import { fileURLToPath } from "url";
 import path from "path";
@@ -36,6 +37,7 @@ import { patientFileRoutes } from "./routes/patient-files.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { warrantyRoutes } from "./routes/warranties.js";
 import { backupRoutes } from "./routes/backups.js";
+import { communicationRoutes } from "./routes/communications.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -119,6 +121,13 @@ export function buildApp() {
     allowedHeaders: ["Content-Type", "Authorization"]
   });
 
+  app.register(fastifyRawBody, {
+    field: "rawBody",
+    global: false,
+    encoding: false,
+    runFirst: true,
+  });
+
   app.register(fastifyStatic, {
     root: path.join(__dirname, '../updates'),
     prefix: '/updates/',
@@ -149,6 +158,7 @@ export function buildApp() {
   app.register(notificationRoutes, { prefix: "/api" });
   app.register(warrantyRoutes, { prefix: "/api" });
   app.register(backupRoutes, { prefix: "/api" });
+  app.register(communicationRoutes, { prefix: "/api" });
 
   return app;
 }
